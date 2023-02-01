@@ -6,10 +6,12 @@
 #include <D3DCompiler.h>
 #include <DirectXMath.h>
 #include <wrl.h>
+#include "win32_window.h"
+
+#include <any>
 
 using namespace Microsoft::WRL;
 using namespace DirectX;
-
 
 class d3d_app 
 {
@@ -23,10 +25,15 @@ class d3d_app
 	};
 
 	UINT MsaaQuality;
+	bool MsaaState = true;
+	bool TearingSupport = false;
 	bool UseWarp = false;
 
 	D3D12_VIEWPORT Viewport;
 	D3D12_RECT Rect;
+
+	const DXGI_FORMAT BackBufferFormat  = DXGI_FORMAT_B8G8R8A8_UNORM;
+    const DXGI_FORMAT DepthBufferFormat = DXGI_FORMAT_D32_FLOAT;
 
 	ComPtr<IDXGIFactory6> Factory;
 	ComPtr<ID3D12Device6> Device;
@@ -53,87 +60,21 @@ class d3d_app
 	D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
 
 	void CommandsBegin(ID3D12PipelineState* PipelineState = nullptr);
-	void CommandBegin();
 	void CommandsEnd();
 public:
-	d3d_app(UINT ClientWidth, UINT ClientHeight);
+	d3d_app(HWND Window, UINT ClientWidth, UINT ClientHeight);
 
 	void OnInit();
 	void OnUpdate();
 	void OnRender();
+
+	void FenceSignal();
+	void FenceWait();
 	void Flush();
-
-	void WaitForGpu();
-	void MoveToNextFrame();
 };
-
-class win_app
-{
-	d3d_app* App;
-	static HWND Window;
-	static bool IsRunning;
-
-	static LRESULT CALLBACK WindowProc(HWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam);
-	int DispatchMessages();
-public:
-	win_app(d3d_app* App, HINSTANCE CurrInst, int CmdShow, UINT _Width, UINT _Height);
-	int Run();
-	static HWND GetWindowHandle() 
-	{
-		return Window;
-	}
-};
-
-HWND win_app::Window = 0;
-bool win_app::IsRunning = false;
-
-win_app::
-win_app(d3d_app* _App, HINSTANCE CurrInst, int CmdShow, UINT _Width, UINT _Height)
-{
-	App = _App;
-
-	const char ClassName[] = "Direct 3D Engine";
-	WNDCLASS WindowClass = {};
-	WindowClass.lpfnWndProc = WindowProc;
-	WindowClass.hInstance = CurrInst;
-	WindowClass.lpszClassName = ClassName;
-	WindowClass.style = CS_HREDRAW | CS_VREDRAW;
-
-	RegisterClass(&WindowClass);
-
-	Window = CreateWindowEx(0,
-		ClassName, "Window", WS_OVERLAPPEDWINDOW,
-		CW_USEDEFAULT, CW_USEDEFAULT,
-		_Width, _Height,
-		0, 0, CurrInst, _App);
-
-	if (Window == NULL) return;
-
-	RECT ClientRect = {};
-	GetClientRect(Window, &ClientRect);
-	int ClientWidth = ClientRect.right - ClientRect.left;
-	int ClientHeight = ClientRect.bottom - ClientRect.top;
-
-	IsRunning = true;
-	App->OnInit();
-
-	ShowWindow(Window, CmdShow);
-	UpdateWindow(Window);
-}
-
-int win_app::Run() 
-{
-	int Result = 0;
-	while (IsRunning)
-	{
-		Result = DispatchMessages();
-	}
-
-	return Result;
-}
 
 d3d_app::
-d3d_app(UINT ClientWidth, UINT ClientHeight) : Width(ClientWidth), Height(ClientHeight)
+d3d_app(HWND Window, UINT ClientWidth, UINT ClientHeight) : Width(ClientWidth), Height(ClientHeight)
 {
 	Viewport.Width = (FLOAT)Width;
 	Viewport.Height = (FLOAT)Height;
@@ -150,10 +91,7 @@ d3d_app(UINT ClientWidth, UINT ClientHeight) : Width(ClientWidth), Height(Client
 #endif
 	
 	CreateDXGIFactory1(IID_PPV_ARGS(&Factory));
-};
 
-void d3d_app::OnInit() 
-{
 	HRESULT HardwareResult = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
 	if (FAILED(HardwareResult))
 	{
@@ -165,15 +103,13 @@ void d3d_app::OnInit()
 	Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
 	FenceEvent = CreateEvent(nullptr, 0, 0, nullptr);
 
-	bool TearingSupport = false;
 	if(SUCCEEDED(Factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &TearingSupport, sizeof(TearingSupport))))
 	{
 		TearingSupport = true;
 	}
 
-	bool MsaaState = true;
 	D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS MsQualityLevels = {};
-	MsQualityLevels.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	MsQualityLevels.Format = BackBufferFormat;
 	MsQualityLevels.SampleCount = 4;
 	Device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &MsQualityLevels, sizeof(MsQualityLevels));
 	MsaaQuality = MsQualityLevels.NumQualityLevels;
@@ -196,14 +132,18 @@ void d3d_app::OnInit()
 		SwapChainDesc.Width = Width;
 		SwapChainDesc.Height = Height;
 		SwapChainDesc.BufferCount = 2;
-		SwapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		SwapChainDesc.Format = BackBufferFormat;
 		SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		SwapChainDesc.SampleDesc.Count = MsaaState ? 4 : 1;
 		SwapChainDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
-		Factory->CreateSwapChainForHwnd(CommandQueue.Get(), win_app::GetWindowHandle(), &SwapChainDesc, nullptr, nullptr, _SwapChain.GetAddressOf());
+		Factory->CreateSwapChainForHwnd(CommandQueue.Get(), Window, &SwapChainDesc, nullptr, nullptr, _SwapChain.GetAddressOf());
 		_SwapChain.As(&SwapChain);
 	}
+};
+
+void d3d_app::OnInit() 
+{
 	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 
 	CommandsBegin();
@@ -237,23 +177,24 @@ void d3d_app::OnInit()
 		DepthStencilDesc.Height = Height;
 		DepthStencilDesc.DepthOrArraySize = 1;
 		DepthStencilDesc.MipLevels = 1;
-		DepthStencilDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		DepthStencilDesc.Format = DepthBufferFormat;
 		DepthStencilDesc.SampleDesc.Count = MsaaState ? 4 : 1;
 		DepthStencilDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
 		DepthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 		DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
 		D3D12_CLEAR_VALUE Clear = {};
-		Clear.Format = DXGI_FORMAT_D32_FLOAT;
+		Clear.Format = DepthBufferFormat;
 		Clear.DepthStencil.Depth = 1.0f;
 		Clear.DepthStencil.Stencil = 0;
-		Device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer));
+		auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer));
 
 		Device->CreateDepthStencilView(DepthStencilBuffer.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
 
-
-		CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE));
-		WaitForGpu();
+		auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+		CommandList->ResourceBarrier(1, &Barrier);
+		Flush();
 	}
 
 	{
@@ -265,9 +206,13 @@ void d3d_app::OnInit()
 		};
 		const UINT VertexBufferSize = sizeof(Vertices);
 
-		Device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(VertexBufferSize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
+		auto TempBufferProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		auto TempBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(VertexBufferSize);
+		Device->CreateCommittedResource(&TempBufferProp, D3D12_HEAP_FLAG_NONE, &TempBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 
-		Device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(VertexBufferSize), D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&VertexBuffer));
+		auto VertexBufferProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		auto VertexBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(VertexBufferSize);
+		Device->CreateCommittedResource(&VertexBufferProp, D3D12_HEAP_FLAG_NONE, &VertexBufferDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&VertexBuffer));
 
 		D3D12_SUBRESOURCE_DATA SubresData = {};
 		SubresData.pData = Vertices;
@@ -275,10 +220,11 @@ void d3d_app::OnInit()
 		SubresData.SlicePitch = VertexBufferSize;
 
 		
-		CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(VertexBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
+		auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(VertexBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+		CommandList->ResourceBarrier(1, &Barrier);
 		UpdateSubresources<1>(CommandList.Get(), VertexBuffer.Get(), TempBuffer.Get(), 0, 0, 1, &SubresData);
 		CommandsEnd();
-		WaitForGpu();
+		Flush();
 
 		VertexBufferView.BufferLocation = VertexBuffer->GetGPUVirtualAddress();
 		VertexBufferView.StrideInBytes = sizeof(vertex);
@@ -287,8 +233,10 @@ void d3d_app::OnInit()
 
 	{
 		{
+			CD3DX12_ROOT_PARAMETER RootParameter = {};
+			RootParameter.InitAsUnorderedAccessView(0);
 			CD3DX12_ROOT_SIGNATURE_DESC RootSignatureDesc;
-			RootSignatureDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+			RootSignatureDesc.Init(1, &RootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 			ComPtr<ID3DBlob> Signature;
 			ComPtr<ID3DBlob> Error;
@@ -308,6 +256,8 @@ void d3d_app::OnInit()
 				{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
 			};
 
+			D3D12_RASTERIZER_DESC RasterDesc = {};
+
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
 			PipelineDesc.InputLayout = {InputDesc, _countof(InputDesc)};
 			PipelineDesc.pRootSignature = RootSignature.Get();
@@ -321,8 +271,8 @@ void d3d_app::OnInit()
 			PipelineDesc.NumRenderTargets = 1;
 			PipelineDesc.SampleDesc.Count = MsaaState ? 4 : 1;
 			PipelineDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
-			PipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-			PipelineDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			PipelineDesc.RTVFormats[0] = BackBufferFormat;
+			PipelineDesc.DSVFormat = DepthBufferFormat;
 			PipelineDesc.SampleDesc.Count = 1;
 			Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&PipelineState));
 		}
@@ -340,7 +290,8 @@ void d3d_app::OnRender()
 	CommandList->SetGraphicsRootSignature(RootSignature.Get());
 	CommandList->SetPipelineState(PipelineState.Get());
 
-	CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	CommandList->ResourceBarrier(1, &Barrier);
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE RenderViewHandle(RtvHeap->GetCPUDescriptorHandleForHeapStart(), BackBufferIndex, RtvSize);
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView = DsvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -355,25 +306,36 @@ void d3d_app::OnRender()
 	CommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
 	CommandList->DrawInstanced(3, 1, 0, 0);
 
-	CommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+	Barrier = CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	CommandList->ResourceBarrier(1, &Barrier);
 
 	CommandsEnd();
 
 	SwapChain->Present(0, 0);
 
-	//Flush();
-	MoveToNextFrame();
+	Flush();
+	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 };
 
 void d3d_app::
 Flush()
 {
-	CurrentFence++;
-	CommandQueue->Signal(Fence.Get(), CurrentFence);
-	UINT64 PrevFence = Fence->GetCompletedValue();
-	if(PrevFence < CurrentFence)
+	FenceSignal();
+	FenceWait();
+}
+
+void d3d_app::
+FenceSignal()
+{
+	CommandQueue->Signal(Fence.Get(), ++CurrentFence);
+}
+
+void d3d_app::
+FenceWait()
+{
+	if(Fence->GetCompletedValue() < CurrentFence)
 	{
-		HANDLE Event = CreateEventEx(nullptr, 0, 0, EVENT_ALL_ACCESS);
+		HANDLE Event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 		Fence->SetEventOnCompletion(CurrentFence, Event);
 		WaitForSingleObject(Event, INFINITE);
 		CloseHandle(Event);
@@ -381,45 +343,10 @@ Flush()
 }
 
 void d3d_app::
-WaitForGpu() 
-{
-	CommandQueue->Signal(Fence.Get(), CurrentFence);
-
-	Fence->SetEventOnCompletion(CurrentFence, FenceEvent);
-	WaitForSingleObject(FenceEvent, INFINITE);
-
-	CurrentFence++;
-}
-
-void d3d_app::
-MoveToNextFrame() 
-{
-	CommandQueue->Signal(Fence.Get(), CurrentFence);
-
-	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
-
-	if (Fence->GetCompletedValue() < CurrentFence)
-	{
-		Fence->SetEventOnCompletion(CurrentFence, FenceEvent);
-		WaitForSingleObject(FenceEvent, INFINITE);
-	}
-
-	CurrentFence++;
-}
-
-void d3d_app::
 CommandsBegin(ID3D12PipelineState* _PipelineState)
 {
 	CommandAlloc->Reset();
 	CommandList->Reset(CommandAlloc.Get(), _PipelineState);
-}
-
-
-void d3d_app::
-CommandBegin()
-{
-	//CommandAlloc->Reset();
-	//CommandList->Reset(CommandAlloc.Get(), _PipelineState);
 }
 
 void d3d_app::
@@ -430,88 +357,31 @@ CommandsEnd()
 	CommandQueue->ExecuteCommandLists(_countof(CmdLists), CmdLists);
 }
 
+class app
+{
+		
+};
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {	
-	d3d_app D3dApp(1240, 720);
-	win_app WinApp(&D3dApp, CurrInst, Show, 1240, 720);
-	return WinApp.Run();
-}
+	window DirectWindow(1240, 720, "3D Renderer");
+	d3d_app Graphics(DirectWindow.Handle, DirectWindow.Width, DirectWindow.Height);
+	Graphics.OnInit();
 
-int win_app::
-DispatchMessages()
-{
-	MSG Message = {};
-
-	while(PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
+	while(DirectWindow.IsRunning())
 	{
-		switch(Message.message)
-		{
-			case WM_SYSKEYDOWN:
-			case WM_SYSKEYUP:
-			case WM_KEYDOWN:
-			case WM_KEYUP:
-			{
-				unsigned int KeyCode = (unsigned int)Message.wParam;
+		auto Result = DirectWindow.ProcessMessages();
+		if(Result) return *Result;
 
-				bool IsDown = ((Message.lParam & (1 << 31)) == 0);
-				bool WasDown = ((Message.lParam & (1 << 30)) != 0);
-				bool IsLeftShift = KeyCode & VK_LSHIFT;
-
-				if(IsDown)
-				{
-					if(KeyCode == 'R')
-					{
-					}
-				}
-			} break;
-			default:
-			{
-				TranslateMessage(&Message);
-				DispatchMessage(&Message);
-			}
-		}
-	}
-
-	return static_cast<char>(Message.wParam);
-}
-
-LRESULT CALLBACK win_app::
-WindowProc(HWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam)
-{
-	d3d_app* App = reinterpret_cast<d3d_app*>(GetWindowLongPtr(Wnd, GWLP_USERDATA));
-	switch (Msg)
-	{
-		case WM_CREATE:
-		{
-			// Save the DXSample* passed in to CreateWindow.
-			LPCREATESTRUCT pCreateStruct = reinterpret_cast<LPCREATESTRUCT>(lParam);
-			SetWindowLongPtr(Wnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pCreateStruct->lpCreateParams));
-		} break;
-	
-		case WM_QUIT:
-		{
-			DestroyWindow(Wnd);
-			IsRunning = false;
-		} break;
-
-		case WM_DESTROY:
-		{
-			IsRunning = false;
-			PostQuitMessage(0);
-		} break;
-
-		case WM_PAINT:
-		{
-			App->OnUpdate();
-			App->OnRender();
-		} break;
-
-		default:
-		{
-			return DefWindowProc(Wnd, Msg, wParam, lParam);
-		} break;
+		Graphics.OnUpdate();
+		Graphics.OnRender();
 	}
 
 	return 0;
 }
+
+int main(int argc, char* argv[])
+{
+	return WinMain(0, 0, argv[0], SW_SHOWNORMAL);
+}
+
