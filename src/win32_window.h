@@ -1,10 +1,5 @@
 
 #ifndef WIN32_WINDOWS_H_
-#include <windows.h>
-#include <optional>
-#include <string>
-#include <vector>
-
 
 class window
 {
@@ -47,6 +42,7 @@ public:
 			WindowClass.IsRunning = false;
 		}
 	}
+	void InitGraphics();
 	static std::optional<int> ProcessMessages();
 
 	void SetTitle(std::string& Title);
@@ -56,6 +52,8 @@ public:
 	const char* Name;
 	unsigned int Width;
 	unsigned int Height;
+
+	std::unique_ptr<d3d_app> Gfx;
 
 private:
 	window(const window& rhs) = delete;
@@ -67,6 +65,7 @@ private:
 
 	static window_class WindowClass;
 };
+
 
 #define WIN32_WINDOWS_H_
 #endif

@@ -1,4 +1,3 @@
-#include "win32_window.h"
 
 window::window_class window::WindowClass;
 
@@ -82,4 +81,9 @@ void window::SetTitle(std::string& Title)
 {
 	SetWindowTextA(Handle, Title.c_str());
 }
+
+void window::InitGraphics()
+{
+}
+
 
