@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 #include <unordered_map>
+#include <type_traits>
 
 #include "directx/d3dx12.h"
 #include <d3d12.h>
@@ -40,6 +41,8 @@ typedef double   r64;
 #define KiB(val) (val * 1024)
 #define MiB(val) (KiB(val) * 1024)
 #define GiB(val) (GiB(val) * 1024)
+
+template<typename T> struct type_name_res;
 
 #include "math.h"
 #include "mesh.h"

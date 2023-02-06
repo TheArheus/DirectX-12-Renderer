@@ -1,16 +1,20 @@
 
 void mesh::Load(std::string Path)
 {
+	std::vector<vec3> Coords;
+	std::vector<vec2> TextCoords;
+	std::vector<vec3> Normals;
+
+	std::vector<u32> CoordIndices;
+	std::vector<u32> TextCoordIndices;
+	std::vector<u32> NormalIndices;
+
 	std::ifstream File(Path);
 	if(File.is_open())
 	{
-		File.seekg(0, std::ios::end);
-		size_t FileSize = File.tellg();
-		File.seekg(0, std::ios::beg);
-
 		std::string Content;
-		v3 Vertex3 = {};
-		v2 Vertex2 = {};
+		vec3 Vertex3 = {};
+		vec2 Vertex2 = {};
 		while (std::getline(File, Content))
 		{
 			char* Line = const_cast<char*>(Content.c_str());
@@ -79,14 +83,9 @@ void mesh::Load(std::string Path)
 		}
 	}
 
-	BuildTriangles();
-}
-
-void mesh::BuildTriangles()
-{
 	std::unordered_map<vertex, u32> UniqueVertices;
 	u32 IndexCount = CoordIndices.size();
-	std::vector<u32> RemapedIndices(IndexCount);
+	VertexIndices.resize(IndexCount);
 
 	for(u32 VertexIndex = 0;
 		VertexIndex < IndexCount;
@@ -94,19 +93,19 @@ void mesh::BuildTriangles()
 	{
 		vertex Vert = {};
 
-		v3 Pos = Coords[CoordIndices[VertexIndex]];
-		Vert.Position = Pos;
+		vec3 Pos = Coords[CoordIndices[VertexIndex]];
+		Vert.Position = v4<u16>(EncodeHalf(Pos.x), EncodeHalf(Pos.y), EncodeHalf(Pos.z), EncodeHalf(1.0f));
 
 		if(TextCoords.size() != 0)
 		{
-			v2 TextCoord = TextCoords[TextCoordIndices[VertexIndex]];
+			vec2 TextCoord = TextCoords[TextCoordIndices[VertexIndex]];
 			Vert.TextureCoord = TextCoord;
 		}
 
 		if(NormalIndices.size() != 0)
 		{
-			v3 Norm = Normals[NormalIndices[VertexIndex]];
-			Vert.Normal = Norm;
+			vec3 Norm = Normals[NormalIndices[VertexIndex]];
+			Vert.Normal = ((u8(Norm.x*127 + 127) << 24) | (u8(Norm.y*127 + 127) << 16) | (u8(Norm.z*127 + 127) << 8) | 0);
 		} 
 
 		if(UniqueVertices.count(Vert) == 0)
@@ -114,10 +113,12 @@ void mesh::BuildTriangles()
 			UniqueVertices[Vert] = static_cast<u32>(Vertices.size());
 			Vertices.push_back(Vert);
 		}
+		else 
+		{
+			int fin = 5;
+		}
 
-		RemapedIndices[VertexIndex] = UniqueVertices[Vert];
+		VertexIndices[VertexIndex] = UniqueVertices[Vert];
 	}
-
-	VertexIndices = std::move(RemapedIndices);
 }
 

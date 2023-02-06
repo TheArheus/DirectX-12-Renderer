@@ -54,7 +54,10 @@ public:
 	d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight);
 
 	void OnInit(mesh& Mesh);
-	void Render(mesh& Mesh);
+	void BeginRender();
+	void Draw(mesh& Mesh);
+	void DrawIndexed(mesh& Mesh);
+	void EndRender();
 
 	void FenceSignal();
 	void FenceWait();

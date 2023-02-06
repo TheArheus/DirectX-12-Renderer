@@ -8,8 +8,13 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {	
 	window DirectWindow(1240, 720, "3D Renderer");
 	d3d_app Graphics(DirectWindow.Handle, DirectWindow.Width, DirectWindow.Height);
+
 	mesh Mesh;
 	Mesh.Load("..\\assets\\kitten.obj");
+
+	float val = 3.14159273;
+	float exp = val - floorf(3.14159273);
+	u8 res = 127 + floorf(3.14159273);
 
 	Graphics.OnInit(Mesh);
 
@@ -18,7 +23,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		auto Result = DirectWindow.ProcessMessages();
 		if(Result) return *Result;
 
-		Graphics.Render(Mesh);
+		Graphics.BeginRender();
+		Graphics.DrawIndexed(Mesh);
+		Graphics.EndRender();
 	}
 
 	return 0;

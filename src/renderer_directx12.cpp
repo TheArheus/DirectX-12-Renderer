@@ -193,9 +193,9 @@ void d3d_app::OnInit(mesh& Mesh)
 
 			D3D12_INPUT_ELEMENT_DESC InputDesc[] = 
 			{
-				{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
-				{"TEXTCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
-				{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 20, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
+				{"POSITION", 0, DXGI_FORMAT_R16G16B16A16_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
+				{"TEXTCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
+				{"NORMAL", 0, DXGI_FORMAT_R32_UINT, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
 			};
 
 			D3D12_RASTERIZER_DESC RasterDesc = {};
@@ -232,7 +232,7 @@ void d3d_app::OnInit(mesh& Mesh)
 	}
 }
 
-void d3d_app::Render(mesh& Mesh)
+void d3d_app::BeginRender()
 {
 	CommandsBegin(PipelineState.Get());
 
@@ -253,11 +253,28 @@ void d3d_app::Render(mesh& Mesh)
 	CommandList->ClearRenderTargetView(RenderViewHandle, ClearColor, 0, nullptr);
 	CommandList->ClearDepthStencilView(DsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 	CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+};
+
+void d3d_app::
+Draw(mesh& Mesh)
+{
+	CommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
+	CommandList->DrawInstanced(Mesh.Vertices.size(), 1, 0, 0);
+}
+
+void d3d_app::
+DrawIndexed(mesh& Mesh)
+{
 	CommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
 	CommandList->IASetIndexBuffer(&IndexBufferView);
 	CommandList->DrawIndexedInstanced(Mesh.VertexIndices.size(), 1, 0, 0, 0);
+}
 
-	Barrier = CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+void d3d_app::
+EndRender()
+{
+
+	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 	CommandList->ResourceBarrier(1, &Barrier);
 
 	CommandsEnd();
@@ -266,7 +283,7 @@ void d3d_app::Render(mesh& Mesh)
 
 	Flush();
 	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
-};
+}
 
 void d3d_app::
 Flush()
