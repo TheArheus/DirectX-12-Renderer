@@ -1,8 +1,8 @@
 struct vert_in
 {
-	vector<float16_t, 4> Pos : POSITION;
-	vector<float, 4> TexPos  : TEXTCOORD;
-	uint			 Normal	 : NORMAL;
+	vector<float16_t, 4> Pos	 : POSITION;
+	vector<float, 2>     TexPos  : TEXTCOORD;
+	uint				 Normal	 : NORMAL;
 };
 
 struct vert_out

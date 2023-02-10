@@ -8,7 +8,6 @@
 #include <string_view>
 #include <vector>
 #include <unordered_map>
-#include <type_traits>
 
 #include "directx/d3dx12.h"
 #include <d3d12.h>
@@ -34,13 +33,13 @@ typedef int64_t  s64;
 typedef float    r32;
 typedef double   r64;
 
-#define KB(val)  (val * 1000)
-#define MB(val)  (KB(val) * 1000)
-#define GB(val)  (MB(val) * 1000)
+constexpr size_t KB(size_t val) { return val * 1000; };
+constexpr size_t MB(size_t val) { return KB(val) * 1000; };
+constexpr size_t GB(size_t val) { return MB(val) * 1000; };
 
-#define KiB(val) (val * 1024)
-#define MiB(val) (KiB(val) * 1024)
-#define GiB(val) (GiB(val) * 1024)
+constexpr size_t KiB(size_t val) { return val * 1024; };
+constexpr size_t MiB(size_t val) { return KiB(val) * 1024; };
+constexpr size_t GiB(size_t val) { return MiB(val) * 1024; };
 
 template<typename T> struct type_name_res;
 

@@ -51,7 +51,7 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 	{
 		ComPtr<IDXGISwapChain1> _SwapChain;
 		DXGI_SWAP_CHAIN_DESC1 SwapChainDesc = {};
-		SwapChainDesc.Flags = TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+		SwapChainDesc.Flags = (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 		SwapChainDesc.Width = Width;
 		SwapChainDesc.Height = Height;
 		SwapChainDesc.BufferCount = 2;
@@ -200,7 +200,7 @@ void d3d_app::OnInit(mesh& Mesh)
 
 			D3D12_RASTERIZER_DESC RasterDesc = {};
 			RasterDesc.FillMode = D3D12_FILL_MODE_SOLID;
-			RasterDesc.CullMode = D3D12_CULL_MODE_FRONT;
+			RasterDesc.CullMode = D3D12_CULL_MODE_BACK;
 			RasterDesc.FrontCounterClockwise = FALSE;
 			RasterDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
 			RasterDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
@@ -313,7 +313,7 @@ FenceWait()
 void d3d_app::
 CommandsBegin(ID3D12PipelineState* _PipelineState)
 {
-	CommandAlloc->Reset();
+	//CommandAlloc->Reset();
 	CommandList->Reset(CommandAlloc.Get(), _PipelineState);
 }
 
@@ -324,3 +324,66 @@ CommandsEnd()
 	ID3D12CommandList* CmdLists[] = { CommandList.Get() };
 	CommandQueue->ExecuteCommandLists(_countof(CmdLists), CmdLists);
 }
+
+void d3d_app::
+RecreateSwapchain(u32 NewWidth, u32 NewHeight)
+{
+	Flush();
+	Width = NewWidth;
+	Height = NewHeight;
+
+	Viewport = { 0, 0, (r32)NewWidth, (r32)NewHeight, D3D12_MIN_DEPTH, D3D12_MAX_DEPTH };
+	Rect = { 0, 0, (LONG)NewWidth, (LONG)NewHeight };
+
+	CommandsBegin();
+
+	for (u32 Idx = 0;
+		Idx < 2;
+		++Idx)
+	{
+		BackBuffers[Idx].Reset();
+	}
+	DepthStencilBuffer.Reset();
+
+	SwapChain->ResizeBuffers(2, NewWidth, NewHeight, BackBufferFormat, (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	BackBufferIndex = 0;
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE RtvHeapHandle(RtvHeap->GetCPUDescriptorHandleForHeapStart());
+	for (u32 Idx = 0;
+		Idx < 2;
+		++Idx)
+	{
+		SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx]));
+		Device->CreateRenderTargetView(BackBuffers[Idx].Get(), nullptr, RtvHeapHandle);
+		RtvHeapHandle.Offset(1, RtvSize);
+	}
+
+	D3D12_RESOURCE_DESC DepthStencilDesc = {};
+	DepthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	DepthStencilDesc.Width = Width;
+	DepthStencilDesc.Height = Height;
+	DepthStencilDesc.DepthOrArraySize = 1;
+	DepthStencilDesc.MipLevels = 1;
+	DepthStencilDesc.Format = DepthBufferFormat;
+	DepthStencilDesc.SampleDesc.Count = MsaaState ? 4 : 1;
+	DepthStencilDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
+	DepthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+	D3D12_CLEAR_VALUE Clear = {};
+	Clear.Format = DepthBufferFormat;
+	Clear.DepthStencil.Depth = 1.0f;
+	Clear.DepthStencil.Stencil = 0;
+	auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+	Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer));
+
+	Device->CreateDepthStencilView(DepthStencilBuffer.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
+
+	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	CommandList->ResourceBarrier(1, &Barrier);
+
+	CommandsEnd();
+
+	Flush();
+}
+

@@ -44,16 +44,22 @@ public:
 	}
 	void InitGraphics();
 	static std::optional<int> ProcessMessages();
+	static double GetTimestamp();
 
 	void SetTitle(std::string& Title);
 	bool IsRunning(){return WindowClass.IsRunning;}
 
+	std::unique_ptr<d3d_app> Gfx;
+
 	HWND Handle;
 	const char* Name;
-	unsigned int Width;
-	unsigned int Height;
+	u32 Width;
+	u32 Height;
 
-	std::unique_ptr<d3d_app> Gfx;
+	bool IsMinimized = false;
+	bool IsMaximized = true;
+	bool IsGfxPaused = false;
+	bool IsResizing  = false;
 
 private:
 	window(const window& rhs) = delete;
@@ -64,6 +70,8 @@ private:
 	LRESULT DispatchMessages(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam);
 
 	static window_class WindowClass;
+
+	static LARGE_INTEGER TimerFrequency;
 };
 
 

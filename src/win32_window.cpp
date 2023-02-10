@@ -1,5 +1,6 @@
 
 window::window_class window::WindowClass;
+LARGE_INTEGER window::TimerFrequency;
 
 window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	: Width(_Width), Height(_Height), Name(_Name)
@@ -18,6 +19,7 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
 	ShowWindow(Handle, SW_SHOWNORMAL);
 
+	QueryPerformanceFrequency(&TimerFrequency);
 }
 
 LRESULT window::InitWindowProc(HWND hWindow, UINT Message, WPARAM wParam, LPARAM lParam)
@@ -49,6 +51,28 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 	{
 		switch(Message)
 		{
+			case WM_ENTERSIZEMOVE:
+			{
+				IsGfxPaused = true;
+				return 0;
+			} break;
+			case WM_EXITSIZEMOVE:
+			{
+				IsGfxPaused = false;
+				if (Gfx)
+				{
+					if (Width != Gfx->Width || Height != Gfx->Height)
+						Gfx->RecreateSwapchain(Width, Height);
+				}
+				return 0;
+			} break;
+			case WM_SIZE:
+			{
+				Width  = LOWORD(lParam);
+				Height = HIWORD(lParam);
+
+				return 0;
+			} break;
 			case WM_CLOSE:
 			{
 				PostQuitMessage(0);
@@ -79,11 +103,19 @@ std::optional<int> window::ProcessMessages()
 
 void window::SetTitle(std::string& Title)
 {
-	SetWindowTextA(Handle, Title.c_str());
+	SetWindowTextA(Handle, (std::string(Name) + " - " + Title).c_str());
 }
 
 void window::InitGraphics()
 {
+	Gfx = std::make_unique<d3d_app>(Handle, Width, Height);
 }
 
+double window::GetTimestamp()
+{
+	LARGE_INTEGER Time;
+	QueryPerformanceCounter(&Time);
+
+	return double(Time.QuadPart) / double(TimerFrequency.QuadPart) * 1000.0;
+}
 

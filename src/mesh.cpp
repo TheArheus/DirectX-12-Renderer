@@ -113,10 +113,6 @@ void mesh::Load(std::string Path)
 			UniqueVertices[Vert] = static_cast<u32>(Vertices.size());
 			Vertices.push_back(Vert);
 		}
-		else 
-		{
-			int fin = 5;
-		}
 
 		VertexIndices[VertexIndex] = UniqueVertices[Vert];
 	}

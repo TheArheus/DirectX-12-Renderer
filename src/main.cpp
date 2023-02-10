@@ -7,25 +7,31 @@
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {	
 	window DirectWindow(1240, 720, "3D Renderer");
-	d3d_app Graphics(DirectWindow.Handle, DirectWindow.Width, DirectWindow.Height);
+	DirectWindow.InitGraphics();
 
 	mesh Mesh;
 	Mesh.Load("..\\assets\\kitten.obj");
 
-	float val = 3.14159273;
-	float exp = val - floorf(3.14159273);
-	u8 res = 127 + floorf(3.14159273);
-
-	Graphics.OnInit(Mesh);
+	DirectWindow.Gfx->OnInit(Mesh);
 
 	while(DirectWindow.IsRunning())
 	{
+		double TimeBeg = window::GetTimestamp();
+
 		auto Result = DirectWindow.ProcessMessages();
 		if(Result) return *Result;
 
-		Graphics.BeginRender();
-		Graphics.DrawIndexed(Mesh);
-		Graphics.EndRender();
+		if(!DirectWindow.IsGfxPaused)
+		{
+			DirectWindow.Gfx->BeginRender();
+			DirectWindow.Gfx->DrawIndexed(Mesh);
+			DirectWindow.Gfx->EndRender();
+		}
+
+		double TimeEnd = window::GetTimestamp();
+
+		std::string Title = "Frame " + std::to_string(TimeEnd - TimeBeg) + "ms";
+		DirectWindow.SetTitle(Title);
 	}
 
 	return 0;

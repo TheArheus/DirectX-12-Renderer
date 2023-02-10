@@ -5,9 +5,6 @@ using namespace DirectX;
 
 class d3d_app 
 {
-	u32 Width;
-	u32 Height;
-
 	u32 MsaaQuality;
 	bool MsaaState = true;
 	bool TearingSupport = false;
@@ -53,6 +50,8 @@ class d3d_app
 public:
 	d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight);
 
+	void RecreateSwapchain(u32 NewWidth, u32 NewHeight);
+
 	void OnInit(mesh& Mesh);
 	void BeginRender();
 	void Draw(mesh& Mesh);
@@ -62,6 +61,9 @@ public:
 	void FenceSignal();
 	void FenceWait();
 	void Flush();
+
+	u32 Width;
+	u32 Height;
 };
 
 #define RENDERER_DIRECTX_12_H_

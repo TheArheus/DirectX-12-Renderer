@@ -130,6 +130,20 @@ namespace std
 	};
 
 	template<>
+	struct hash<v2<u16>>
+	{
+		size_t operator()(const v2<u16>& v) const
+		{
+			size_t ValueToHash = 0;
+			size_t Result = 0;
+
+			ValueToHash = (v.x << 16) | (v.y);
+			hash_combine(Result, hash<u32>()(ValueToHash));
+			return Result;
+		}
+	};
+
+	template<>
 	struct hash<v4<u16>>
 	{
 		size_t operator()(const v4<u16>& v) const
@@ -154,9 +168,9 @@ u16 EncodeHalf(float x)
 	u32 e = (v & 0x7f80'0000) >> 23;
 	u32 m = (v & 0x007f'ffff);
 
-	if(e >= 255) return (s << 15) | 0x7c00;
+	if(e >= 255)	 return (s << 15) | 0x7c00;
 	if(e > (127+15)) return (s << 15) | 0x7c00;
-	if(e < (127-14)) return (s << 15) | 0x0;
+	if(e < (127-14)) return (s << 15) | 0x0 | (m >> 13);
 
 	e = e - 127 + 15;
 	m = m / float(1 << 23) * float(1 << 10);
@@ -176,34 +190,4 @@ float DecodeHalf(u16 Val)
 
 	return Res;
 }
-
-#if 0
-u32 EncodeSingle(float Val) 
-{
-	bool Sign = Val < 0;
-
-	u8  Lower =  std::floorf(std::log2f(Val));
-	u8  Upper =  Lower + 1;
-	u16 Exp   = (Lower + 127) & 0xFF;
-
-	float Percent = (Val - (float)(1 << Lower)) / ((float)(1 << Upper) - (float)(1 << Lower));
-
-	u32 Mantissa = std::roundf(Percent * (1 << 23));
-
-	return (Sign << 30) | (Exp << 23) | (Mantissa);
-}
-
-float DecodeSingle(u32 Val) 
-{
-	float Res = 0;
-
-	bool Sign =  Val & 0x8000'0000;
-	u8   Exp  = (Val & 0x7F80'0000) >> 23;
-	u32  Mant =  Val & 0x007F'FFFF;
-
-	Res = -1*Sign * (1 << (Exp - 127)) * (1 + float(Mant) / (1 << 23));
-
-	return Res;
-}
-#endif
 

@@ -30,7 +30,6 @@ struct hash<vertex>
 		std::hash_combine(res, hash<decltype(VertData.Normal)>()(VertData.Normal));
 		return res;
 	}
-private:
 };
 }
 
