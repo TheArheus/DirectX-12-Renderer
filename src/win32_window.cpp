@@ -109,8 +109,10 @@ void window::SetTitle(std::string& Title)
 void window::InitGraphics()
 {
 	Gfx = std::make_unique<d3d_app>(Handle, Width, Height);
+	Gfx->OnInit();
 }
 
+// Returns time in milliseconds
 double window::GetTimestamp()
 {
 	LARGE_INTEGER Time;

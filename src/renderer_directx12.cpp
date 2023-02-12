@@ -15,6 +15,7 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 	
 	CreateDXGIFactory1(IID_PPV_ARGS(&Factory));
 
+#if 0
 	HRESULT HardwareResult = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
 	if (FAILED(HardwareResult))
 	{
@@ -22,6 +23,9 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 		Factory->EnumWarpAdapter(IID_PPV_ARGS(&WarpAdapter));
 		D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
 	}
+#else
+	GetDevice(&Device);
+#endif
 
 	Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
 	FenceEvent = CreateEvent(nullptr, 0, 0, nullptr);
@@ -65,7 +69,7 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 	}
 };
 
-void d3d_app::OnInit(mesh& Mesh) 
+void d3d_app::OnInit() 
 {
 	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 
@@ -117,57 +121,6 @@ void d3d_app::OnInit(mesh& Mesh)
 
 		auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 		CommandList->ResourceBarrier(1, &Barrier);
-		Flush();
-	}
-
-	{
-		const u32 VertexBufferSize = Mesh.Vertices.size() * sizeof(vertex);
-
-		auto TempBufferProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		auto TempBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(VertexBufferSize);
-		Device->CreateCommittedResource(&TempBufferProp, D3D12_HEAP_FLAG_NONE, &TempBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer1));
-
-		auto VertexBufferProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		auto VertexBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(VertexBufferSize);
-		Device->CreateCommittedResource(&VertexBufferProp, D3D12_HEAP_FLAG_NONE, &VertexBufferDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&VertexBuffer));
-
-		D3D12_SUBRESOURCE_DATA SubresData = {};
-		SubresData.pData = Mesh.Vertices.data();
-		SubresData.RowPitch = VertexBufferSize;
-		SubresData.SlicePitch = VertexBufferSize;
-		
-		auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(VertexBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
-		CommandList->ResourceBarrier(1, &Barrier);
-		UpdateSubresources<1>(CommandList.Get(), VertexBuffer.Get(), TempBuffer1.Get(), 0, 0, 1, &SubresData);
-
-		VertexBufferView.BufferLocation = VertexBuffer->GetGPUVirtualAddress();
-		VertexBufferView.StrideInBytes = sizeof(vertex);
-		VertexBufferView.SizeInBytes = VertexBufferSize;
-	}
-
-	{
-		const u32 IndexBufferSize = Mesh.VertexIndices.size() * sizeof(u32);
-
-		auto TempBufferProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		auto TempBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(IndexBufferSize);
-		Device->CreateCommittedResource(&TempBufferProp, D3D12_HEAP_FLAG_NONE, &TempBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer2));
-
-		auto IndexBufferProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		auto IndexBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(IndexBufferSize);
-		Device->CreateCommittedResource(&IndexBufferProp, D3D12_HEAP_FLAG_NONE, &IndexBufferDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&IndexBuffer));
-
-		D3D12_SUBRESOURCE_DATA SubresData = {};
-		SubresData.pData = Mesh.VertexIndices.data();
-		SubresData.RowPitch = IndexBufferSize;
-		SubresData.SlicePitch = IndexBufferSize;
-		
-		auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(IndexBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
-		CommandList->ResourceBarrier(1, &Barrier);
-		UpdateSubresources<1>(CommandList.Get(), IndexBuffer.Get(), TempBuffer2.Get(), 0, 0, 1, &SubresData);
-
-		IndexBufferView.BufferLocation = IndexBuffer->GetGPUVirtualAddress();
-		IndexBufferView.SizeInBytes = IndexBufferSize;
-		IndexBufferView.Format = DXGI_FORMAT_R32_UINT;
 	}
 	CommandsEnd();
 	Flush();
@@ -256,18 +209,24 @@ void d3d_app::BeginRender()
 };
 
 void d3d_app::
-Draw(mesh& Mesh)
+Draw()
 {
-	CommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
-	CommandList->DrawInstanced(Mesh.Vertices.size(), 1, 0, 0);
+	for(const vertex_buffer_view& View : VertexViews)
+	{
+		CommandList->IASetVertexBuffers(0, 1, &View.Handle);
+		CommandList->DrawInstanced(View.VertexCount, 1, 0, 0);
+	}
 }
 
 void d3d_app::
-DrawIndexed(mesh& Mesh)
+DrawIndexed()
 {
-	CommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
-	CommandList->IASetIndexBuffer(&IndexBufferView);
-	CommandList->DrawIndexedInstanced(Mesh.VertexIndices.size(), 1, 0, 0, 0);
+	for(const std::pair<vertex_buffer_view, index_buffer_view>& View : IndexedVertexViews)
+	{
+		CommandList->IASetVertexBuffers(0, 1, &View.first.Handle);
+		CommandList->IASetIndexBuffer(&View.second.Handle);
+		CommandList->DrawIndexedInstanced(View.second.IndexCount, 1, 0, 0, 0);
+	}
 }
 
 void d3d_app::
@@ -313,7 +272,7 @@ FenceWait()
 void d3d_app::
 CommandsBegin(ID3D12PipelineState* _PipelineState)
 {
-	//CommandAlloc->Reset();
+	CommandAlloc->Reset();
 	CommandList->Reset(CommandAlloc.Get(), _PipelineState);
 }
 
@@ -385,5 +344,32 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	CommandsEnd();
 
 	Flush();
+}
+
+void d3d_app::
+PushVertexData(buffer* VertexBuffer, u32 VerticesCount)
+{
+	vertex_buffer_view VertexBufferView = {};
+	VertexBufferView.VertexBegin = !IndexedVertexViews.empty() ? IndexedVertexViews.back().first.VertexBegin + IndexedVertexViews.back().first.VertexCount : 0;
+	VertexBufferView.VertexCount = VerticesCount;
+	VertexBufferView.Handle = {VertexBuffer->GpuPtr, static_cast<u32>(VertexBuffer->Size), sizeof(vertex)};
+
+	VertexViews.push_back(VertexBufferView);
+}
+
+void d3d_app::
+PushIndexedVertexData(buffer* VertexBuffer, u32 VerticesCount, buffer* IndexBuffer, u32 IndexCount)
+{
+	vertex_buffer_view VertexBufferView = {};
+	VertexBufferView.VertexBegin = !IndexedVertexViews.empty() ? IndexedVertexViews.back().first.VertexBegin + IndexedVertexViews.back().first.VertexCount : 0;
+	VertexBufferView.VertexCount = VerticesCount;
+	VertexBufferView.Handle = {VertexBuffer->GpuPtr, static_cast<u32>(VertexBuffer->Size), sizeof(vertex)};
+
+	index_buffer_view IndexBufferView = {};
+	IndexBufferView.IndexBegin = !IndexedVertexViews.empty() ? IndexedVertexViews.back().second.IndexBegin + IndexedVertexViews.back().second.IndexCount : 0;
+	IndexBufferView.IndexCount = IndexCount;
+	IndexBufferView.Handle = {IndexBuffer->GpuPtr, static_cast<u32>(IndexBuffer->Size), DXGI_FORMAT_R32_UINT};
+
+	IndexedVertexViews.push_back(std::make_pair(VertexBufferView, IndexBufferView));
 }
 

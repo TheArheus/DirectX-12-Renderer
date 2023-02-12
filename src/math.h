@@ -9,11 +9,128 @@ union v2
 	T E[2];
 
 	v2() = default;
+
+	v2(T V) : x(V), y(V) {};
 	v2(T _x, T _y) : x(_x), y(_y){};
+
+	template<typename U>
+	v2(const v2<U>& V){ x = V.x; y = V.y; };
 
 	T& operator[](u32 Idx)
 	{
 		return E[Idx];
+	}
+
+	v2 operator+(const v2& rhs)
+	{
+		v2 Result = {};
+		Result.x = this->x + rhs.x;
+		Result.y = this->y + rhs.y;
+		return Result;
+	}
+
+	v2 operator+(const r32& rhs)
+	{
+		v2 Result = {};
+		Result.x = this->x + rhs;
+		Result.y = this->y + rhs;
+		return Result;
+	}
+
+	v2& operator+=(const v2& rhs)
+	{
+		*this = *this + rhs;
+		return *this;
+	}
+
+	v2& operator+=(const r32& rhs)
+	{
+		*this = *this + rhs;
+		return *this;
+	}
+
+	v2 operator-(const v2& rhs)
+	{
+		v2 Result = {};
+		Result.x = this->x - rhs.x;
+		Result.y = this->y - rhs.y;
+		return Result;
+	}
+
+	v2 operator-(const r32& rhs)
+	{
+		v2 Result = {};
+		Result.x = this->x - rhs;
+		Result.y = this->y - rhs;
+		return Result;
+	}
+
+	v2& operator-=(const v2& rhs)
+	{
+		*this = *this - rhs;
+		return *this;
+	}
+
+	v2& operator-=(const r32& rhs)
+	{
+		*this = *this - rhs;
+		return *this;
+	}
+
+	v2 operator*(const v2& rhs)
+	{
+		v2 Result = {};
+		Result.x = this->x * rhs.x;
+		Result.y = this->y * rhs.y;
+		return Result;
+	}
+
+	v2 operator*(const r32& rhs)
+	{
+		v2 Result = {};
+		Result.x = this->x * rhs;
+		Result.y = this->y * rhs;
+		return Result;
+	}
+
+	v2& operator*=(const v2& rhs)
+	{
+		*this = *this * rhs;
+		return *this;
+	}
+
+	v2& operator*=(const r32& rhs)
+	{
+		*this = *this * rhs;
+		return *this;
+	}
+
+	v2 operator/(const v2& rhs)
+	{
+		v2 Result = {};
+		Result.x = this->x / rhs.x;
+		Result.y = this->y / rhs.y;
+		return Result;
+	}
+
+	v2 operator/(const r32& rhs)
+	{
+		v2 Result = {};
+		Result.x = this->x / rhs;
+		Result.y = this->y / rhs;
+		return Result;
+	}
+
+	v2& operator/=(const v2& rhs)
+	{
+		*this = *this / rhs;
+		return *this;
+	}
+
+	v2& operator/=(const r32& rhs)
+	{
+		*this = *this / rhs;
+		return *this;
 	}
 
 	bool operator==(const v2& rhs) const
@@ -32,11 +149,138 @@ union v3
 	T E[3];
 
 	v3() = default;
+
+	v3(T V) : x(V), y(V), z(V) {};
 	v3(T _x, T _y, T _z) : x(_x), y(_y), z(_z) {};
+
+	template<typename U>
+	v3(const v2<U>& V){ x = V.x; y = V.y; z = 0; };
+	template<typename U>
+	v3(const v3<U>& V){ x = V.x; y = V.y; z = V.z; };
 
 	T& operator[](u32 Idx)
 	{
 		return E[Idx];
+	}
+
+	v3 operator+(const v3& rhs)
+	{
+		v3 Result = {};
+		Result.x = this->x + rhs.x;
+		Result.y = this->y + rhs.y;
+		Result.z = this->z + rhs.z;
+		return Result;
+	}
+
+	v3 operator+(const r32& rhs)
+	{
+		v3 Result = {};
+		Result.x = this->x + rhs;
+		Result.y = this->y + rhs;
+		Result.z = this->z + rhs;
+		return Result;
+	}
+
+	v3& operator+=(const v3& rhs)
+	{
+		*this = *this + rhs;
+		return *this;
+	}
+
+	v3& operator+=(const r32& rhs)
+	{
+		*this = *this + rhs;
+		return *this;
+	}
+
+	v3 operator-(const v3& rhs)
+	{
+		v3 Result = {};
+		Result.x = this->x - rhs.x;
+		Result.y = this->y - rhs.y;
+		Result.z = this->z - rhs.z;
+		return Result;
+	}
+
+	v3 operator-(const r32& rhs)
+	{
+		v3 Result = {};
+		Result.x = this->x - rhs;
+		Result.y = this->y - rhs;
+		Result.z = this->z - rhs;
+		return Result;
+	}
+
+	v3& operator-=(const v3& rhs)
+	{
+		*this = *this - rhs;
+		return *this;
+	}
+
+	v3& operator-=(const r32& rhs)
+	{
+		*this = *this - rhs;
+		return *this;
+	}
+
+	v3 operator*(const v3& rhs)
+	{
+		v3 Result = {};
+		Result.x = this->x * rhs.x;
+		Result.y = this->y * rhs.y;
+		Result.z = this->z * rhs.z;
+		return Result;
+	}
+
+	v3 operator*(const r32& rhs)
+	{
+		v3 Result = {};
+		Result.x = this->x * rhs;
+		Result.y = this->y * rhs;
+		Result.z = this->z * rhs;
+		return Result;
+	}
+
+	v3& operator*=(const v3& rhs)
+	{
+		*this = *this * rhs;
+		return *this;
+	}
+
+	v3& operator*=(const r32& rhs)
+	{
+		*this = *this * rhs;
+		return *this;
+	}
+
+	v3 operator/(const v3& rhs)
+	{
+		v3 Result = {};
+		Result.x = this->x / rhs.x;
+		Result.y = this->y / rhs.y;
+		Result.z = this->z / rhs.z;
+		return Result;
+	}
+
+	v3 operator/(const r32& rhs)
+	{
+		v3 Result = {};
+		Result.x = this->x / rhs;
+		Result.y = this->y / rhs;
+		Result.z = this->z / rhs;
+		return Result;
+	}
+
+	v3& operator/=(const v3& rhs)
+	{
+		*this = *this / rhs;
+		return *this;
+	}
+
+	v3& operator/=(const r32& rhs)
+	{
+		*this = *this / rhs;
+		return *this;
 	}
 
 	bool operator==(const v3& rhs) const
@@ -55,11 +299,144 @@ union v4
 	T E[4];
 
 	v4() = default;
+
+	v4(T V) : x(V), y(V), z(V), w(V) {};
+	v4(v2<T> V) : x(V.x), y(V.y), z(0), w(0) {};
+	v4(v3<T> V) : x(V.x), y(V.y), z(V.z), w(0) {};
+	v4(v3<T> V, T _w) : x(V.x), y(V.y), z(V.z), w(_w) {};
 	v4(T _x, T _y, T _z, T _w) : x(_x), y(_y), z(_z), w(_w) {};
 
 	T& operator[](u32 Idx)
 	{
 		return E[Idx];
+	}
+
+	v4 operator+(const v4& rhs)
+	{
+		v4 Result = {};
+		Result.x = this->x + rhs.x;
+		Result.y = this->y + rhs.y;
+		Result.z = this->z + rhs.z;
+		Result.w = this->w + rhs.w;
+		return Result;
+	}
+
+	v4 operator+(const r32& rhs)
+	{
+		v4 Result = {};
+		Result.x = this->x + rhs;
+		Result.y = this->y + rhs;
+		Result.z = this->z + rhs;
+		Result.w = this->w + rhs;
+		return Result;
+	}
+
+	v4& operator+=(const v4& rhs)
+	{
+		*this = *this + rhs;
+		return *this;
+	}
+
+	v4& operator+=(const r32& rhs)
+	{
+		*this = *this + rhs;
+		return *this;
+	}
+
+	v4 operator-(const v4& rhs)
+	{
+		v4 Result = {};
+		Result.x = this->x - rhs.x;
+		Result.y = this->y - rhs.y;
+		Result.z = this->z - rhs.z;
+		Result.w = this->w - rhs.w;
+		return Result;
+	}
+
+	v4 operator-(const r32& rhs)
+	{
+		v4 Result = {};
+		Result.x = this->x - rhs;
+		Result.y = this->y - rhs;
+		Result.z = this->z - rhs;
+		Result.w = this->w - rhs;
+		return Result;
+	}
+
+	v4& operator-=(const v4& rhs)
+	{
+		*this = *this - rhs;
+		return *this;
+	}
+
+	v4& operator-=(const r32& rhs)
+	{
+		*this = *this - rhs;
+		return *this;
+	}
+
+	v4 operator*(const v4& rhs)
+	{
+		v4 Result = {};
+		Result.x = this->x * rhs.x;
+		Result.y = this->y * rhs.y;
+		Result.z = this->z * rhs.z;
+		Result.w = this->w * rhs.w;
+		return Result;
+	}
+
+	v4 operator*(const r32& rhs)
+	{
+		v4 Result = {};
+		Result.x = this->x * rhs;
+		Result.y = this->y * rhs;
+		Result.z = this->z * rhs;
+		Result.w = this->w * rhs;
+		return Result;
+	}
+
+	v4& operator*=(const v4& rhs)
+	{
+		*this = *this * rhs;
+		return *this;
+	}
+
+	v4& operator*=(const r32& rhs)
+	{
+		*this = *this * rhs;
+		return *this;
+	}
+
+	v4 operator/(const v4& rhs)
+	{
+		v4 Result = {};
+		Result.x = this->x / rhs.x;
+		Result.y = this->y / rhs.y;
+		Result.z = this->z / rhs.z;
+		Result.w = this->w / rhs.w;
+		return Result;
+	}
+
+	v4 operator/(const r32& rhs)
+	{
+		v4 Result = {};
+		Result.x = this->x / rhs;
+		Result.y = this->y / rhs;
+		Result.z = this->z / rhs;
+		Result.w = this->w / rhs;
+		return Result;
+	}
+
+	v4& operator/=(const v4& rhs)
+	{
+		*this = *this / rhs;
+		return *this;
+	}
+
+	v4& operator/=(const r32& rhs)
+	{
+		*this = *this / rhs;
+		return *this;
 	}
 
 	bool operator==(const v4& rhs) const
@@ -79,7 +456,6 @@ using vec4 = v4<r32>;
 using veci2 = v2<s32>;
 using veci3 = v3<s32>;
 using veci4 = v4<s32>;
-
 
 namespace std
 {
@@ -189,5 +565,15 @@ float DecodeHalf(u16 Val)
 	Res = std::powf(-1, Sign) * (1 << (Exp - 15)) * (1 + float(Mant) / (1 << 10));
 
 	return Res;
+}
+
+u64 AlignUp(u64 Size, u64 Align = 4)
+{
+	return (Size + (Align - 1)) & ~(Align - 1);
+}
+
+u64 AlignDown(u64 Size, u64 Align = 4)
+{
+	return Size & ~(Align - 1);
 }
 
