@@ -214,7 +214,7 @@ Draw()
 	for(const vertex_buffer_view& View : VertexViews)
 	{
 		CommandList->IASetVertexBuffers(0, 1, &View.Handle);
-		CommandList->DrawInstanced(View.VertexCount, 1, 0, 0);
+		CommandList->DrawInstanced(View.VertexCount, 1, View.VertexBegin, 0);
 	}
 }
 
@@ -225,7 +225,7 @@ DrawIndexed()
 	{
 		CommandList->IASetVertexBuffers(0, 1, &View.first.Handle);
 		CommandList->IASetIndexBuffer(&View.second.Handle);
-		CommandList->DrawIndexedInstanced(View.second.IndexCount, 1, 0, 0, 0);
+		CommandList->DrawIndexedInstanced(View.second.IndexCount, 1, View.second.IndexBegin, 0, 0);
 	}
 }
 
@@ -347,29 +347,34 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 }
 
 void d3d_app::
-PushVertexData(buffer* VertexBuffer, u32 VerticesCount)
+PushVertexData(buffer* VertexBuffer, std::vector<mesh::offset>& Offsets)
 {
 	vertex_buffer_view VertexBufferView = {};
-	VertexBufferView.VertexBegin = !IndexedVertexViews.empty() ? IndexedVertexViews.back().first.VertexBegin + IndexedVertexViews.back().first.VertexCount : 0;
-	VertexBufferView.VertexCount = VerticesCount;
-	VertexBufferView.Handle = {VertexBuffer->GpuPtr, static_cast<u32>(VertexBuffer->Size), sizeof(vertex)};
-
-	VertexViews.push_back(VertexBufferView);
+	for(const mesh::offset& Offset : Offsets)
+	{
+		VertexBufferView.VertexBegin = Offset.VertexOffset;
+		VertexBufferView.VertexCount = Offset.VertexCount;
+		VertexBufferView.Handle = {VertexBuffer->GpuPtr, static_cast<u32>(VertexBuffer->Size), sizeof(vertex)};
+		VertexViews.push_back(VertexBufferView);
+	}
 }
 
 void d3d_app::
-PushIndexedVertexData(buffer* VertexBuffer, u32 VerticesCount, buffer* IndexBuffer, u32 IndexCount)
+PushIndexedVertexData(buffer* VertexBuffer, buffer* IndexBuffer, std::vector<mesh::offset>& Offsets)
 {
 	vertex_buffer_view VertexBufferView = {};
-	VertexBufferView.VertexBegin = !IndexedVertexViews.empty() ? IndexedVertexViews.back().first.VertexBegin + IndexedVertexViews.back().first.VertexCount : 0;
-	VertexBufferView.VertexCount = VerticesCount;
-	VertexBufferView.Handle = {VertexBuffer->GpuPtr, static_cast<u32>(VertexBuffer->Size), sizeof(vertex)};
-
 	index_buffer_view IndexBufferView = {};
-	IndexBufferView.IndexBegin = !IndexedVertexViews.empty() ? IndexedVertexViews.back().second.IndexBegin + IndexedVertexViews.back().second.IndexCount : 0;
-	IndexBufferView.IndexCount = IndexCount;
-	IndexBufferView.Handle = {IndexBuffer->GpuPtr, static_cast<u32>(IndexBuffer->Size), DXGI_FORMAT_R32_UINT};
+	for(const mesh::offset& Offset : Offsets)
+	{
+		VertexBufferView.VertexBegin = Offset.VertexOffset;
+		VertexBufferView.VertexCount = Offset.VertexCount;
+		VertexBufferView.Handle = {VertexBuffer->GpuPtr, static_cast<u32>(VertexBuffer->Size), sizeof(vertex)};
 
-	IndexedVertexViews.push_back(std::make_pair(VertexBufferView, IndexBufferView));
+		IndexBufferView.IndexBegin = Offset.IndexOffset;
+		IndexBufferView.IndexCount = Offset.IndexCount;
+		IndexBufferView.Handle = {IndexBuffer->GpuPtr, static_cast<u32>(IndexBuffer->Size), DXGI_FORMAT_R32_UINT};
+
+		IndexedVertexViews.push_back(std::make_pair(VertexBufferView, IndexBufferView));
+	}
 }
 

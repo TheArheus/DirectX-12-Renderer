@@ -82,11 +82,21 @@ struct shader_resource_view
 	D3D12_SHADER_RESOURCE_VIEW_DESC Handle;
 };
 
+struct unordered_access_view
+{
+	D3D12_UNORDERED_ACCESS_VIEW_DESC Handle;
+};
+
+struct sampler
+{
+	D3D12_SAMPLER_DESC Handle;
+};
+
 class d3d_app;
 class memory_heap
 {
 public:
-	memory_heap(u64 TotalSize) : Size(TotalSize), Alignment(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT)
+	memory_heap(u64 NewSize) : Size(NewSize), Alignment(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT)
 	{
 		ComPtr<ID3D12Device6> Device;
 		GetDevice(&Device);
@@ -99,21 +109,30 @@ public:
 		D3D12_HEAP_DESC HeapDesc = {};
 		HeapDesc.Flags = D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES;
 		HeapDesc.Properties = HeapProps;
-		HeapDesc.SizeInBytes = TotalSize;
+		HeapDesc.SizeInBytes = Size;
 		HeapDesc.Alignment = Alignment;
 
 		Device->CreateHeap(&HeapDesc, IID_PPV_ARGS(&Handle));
 	}
 
+	void Reset()
+	{
+		BeginData = 0;
+	}
+
 	buffer PushBuffer(std::unique_ptr<d3d_app>& App, void* Data, u64 DataSize)
 	{
+		u64 AlignedSize = AlignUp(DataSize, Alignment);
+		assert(AlignedSize + TotalSize <= Size);
 		buffer Buffer(App, Handle.Get(), Data, DataSize, BeginData);
-		BeginData += AlignUp(DataSize, Alignment);
+		BeginData += AlignedSize;
+		TotalSize += AlignedSize;
 		return Buffer;
 	}
 
 private:
 	u64 Size = 0;
+	u64 TotalSize = 0;
 	u64 BeginData = 0;
 	u64 Alignment = 0;
 
@@ -159,8 +178,8 @@ public:
 
 	void RecreateSwapchain(u32 NewWidth, u32 NewHeight);
 
-	void PushVertexData(buffer* VertexBuffer, u32 VerticesCount);
-	void PushIndexedVertexData(buffer* VertexBuffer, u32 VerticesCount, buffer* IndexBuffer, u32 IndexCount);
+	void PushVertexData(buffer* VertexBuffer, std::vector<mesh::offset>& Offsets);
+	void PushIndexedVertexData(buffer* VertexBuffer, buffer* IndexBuffer, std::vector<mesh::offset>& Offsets);
 
 	void CommandsBegin(ID3D12PipelineState* PipelineState = nullptr);
 	void CommandsEnd();

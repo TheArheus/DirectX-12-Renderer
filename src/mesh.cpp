@@ -1,6 +1,27 @@
 
-void mesh::Load(std::string Path)
+mesh::
+mesh(const std::string& Path)
 {
+	Load(Path);
+}
+
+mesh::
+mesh(std::initializer_list<std::string> Paths)
+{
+	for(std::string Path : Paths)
+	{
+		Load(Path);
+	}
+}
+
+
+void mesh::
+Load(const std::string& Path)
+{
+	offset NewOffset = {};
+	NewOffset.VertexOffset = Vertices.size();
+	NewOffset.IndexOffset = VertexIndices.size();
+
 	std::vector<vec3> Coords;
 	std::vector<vec2> TextCoords;
 	std::vector<vec3> Normals;
@@ -85,7 +106,7 @@ void mesh::Load(std::string Path)
 
 	std::unordered_map<vertex, u32> UniqueVertices;
 	u32 IndexCount = CoordIndices.size();
-	VertexIndices.resize(IndexCount);
+	std::vector<u32> Indices(IndexCount);
 
 	for(u32 VertexIndex = 0;
 		VertexIndex < IndexCount;
@@ -114,7 +135,13 @@ void mesh::Load(std::string Path)
 			Vertices.push_back(Vert);
 		}
 
-		VertexIndices[VertexIndex] = UniqueVertices[Vert];
+		Indices[VertexIndex] = UniqueVertices[Vert];
 	}
+
+	VertexIndices.insert(VertexIndices.end(), Indices.begin(), Indices.end());
+
+	NewOffset.VertexCount = UniqueVertices.size();
+	NewOffset.IndexCount = Indices.size();
+	Offsets.push_back(NewOffset);
 }
 

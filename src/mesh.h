@@ -35,11 +35,22 @@ struct hash<vertex>
 
 struct mesh
 {
+	struct offset
+	{
+		u32 VertexOffset;
+		u32 VertexCount;
+
+		u32 IndexOffset;
+		u32 IndexCount;
+	};
+
+	mesh(const std::string& Path);
+	mesh(std::initializer_list<std::string> Paths);
+	void Load(const std::string& Path);
+
 	std::vector<vertex> Vertices;
 	std::vector<u32> VertexIndices;
-
-	void Load(std::string Path);
-	void BuildTriangles();
+	std::vector<offset> Offsets;
 };
 
 

@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 #include <unordered_map>
+#include <initializer_list>
 
 #include "directx/d3dx12.h"
 #include <d3d12.h>
