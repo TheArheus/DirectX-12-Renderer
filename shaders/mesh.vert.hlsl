@@ -1,9 +1,11 @@
 struct vert_in
 {
-	vector<float16_t, 4> Pos	 : POSITION;
-	vector<float, 2>     TexPos  : TEXTCOORD;
-	uint				 Normal	 : NORMAL;
+	vector<float16_t, 4> Pos;
+	vector<float, 2>	 TexPos;
+	uint				 Normal;
 };
+
+StructuredBuffer<vert_in> VerticesIn : register(t0, space0);
 
 struct vert_out
 {
@@ -11,8 +13,9 @@ struct vert_out
 	float4 Col : COLOR;
 };
 
-vert_out main(vert_in In)
+vert_out main(uint Index : SV_VertexID)
 {	
+	vert_in In = VerticesIn[Index];
 	vert_out Out;
 	float NormalX = ((In.Normal & 0xff000000) >> 24);
 	float NormalY = ((In.Normal & 0x00ff0000) >> 16);
