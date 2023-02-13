@@ -1,22 +1,22 @@
 
 mesh::
-mesh(const std::string& Path)
+mesh(const std::string& Path, u32 BoundingGeneration)
 {
-	Load(Path);
+	Load(Path, BoundingGeneration);
 }
 
 mesh::
-mesh(std::initializer_list<std::string> Paths)
+mesh(std::initializer_list<std::string> Paths, u32 BoundingGeneration)
 {
 	for(std::string Path : Paths)
 	{
-		Load(Path);
+		Load(Path, BoundingGeneration);
 	}
 }
 
 
 void mesh::
-Load(const std::string& Path)
+Load(const std::string& Path, u32 BoundingGeneration)
 {
 	offset NewOffset = {};
 	NewOffset.VertexOffset = Vertices.size();
@@ -143,5 +143,46 @@ Load(const std::string& Path)
 	NewOffset.VertexCount = UniqueVertices.size();
 	NewOffset.IndexCount = Indices.size();
 	Offsets.push_back(NewOffset);
+
+	if(BoundingGeneration & generate_aabb)
+	{
+		GenerateAxisAlignedBoundingBox(Coords);
+	}
+	// NOTE: This bounding sphere could be generated only if
+	// aabb is genearted.
+	if(BoundingGeneration & (generate_aabb | generate_sphere))
+	{
+		GenerateBoundingSphere();
+	}
+}
+
+void mesh::
+GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords)
+{
+	r32 MinX = FLT_MAX, MinY = FLT_MAX, MinZ = FLT_MAX;
+	r32 MaxX = -FLT_MAX, MaxY = -FLT_MAX, MaxZ = -FLT_MAX;
+
+	for(const vec3& Coord : Coords)
+	{
+		if(Coord.x < MinX) MinX = Coord.x;
+		if(Coord.y < MinY) MinY = Coord.y;
+		if(Coord.z < MinZ) MinZ = Coord.z;
+		if(Coord.x > MaxX) MaxX = Coord.x;
+		if(Coord.y > MaxY) MaxY = Coord.y;
+		if(Coord.z > MaxZ) MaxZ = Coord.z;
+	}
+
+	aabb AABB = {{MinX, MinY, MinZ}, {MaxX, MaxY, MaxZ}};
+	AABBs.push_back(AABB);
+}
+
+void mesh::
+GenerateBoundingSphere()
+{
+	aabb AABB = AABBs.back();
+	sphere BoundingSphere = {};
+	BoundingSphere.Center = (AABB.Max + AABB.Min) * 0.5f;
+	BoundingSphere.Radius = (AABB.Max - BoundingSphere.Center).Length();
+	BoundingSpheres.push_back(BoundingSphere);
 }
 

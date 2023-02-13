@@ -15,17 +15,16 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 	
 	CreateDXGIFactory1(IID_PPV_ARGS(&Factory));
 
-#if 0
-	HRESULT HardwareResult = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
-	if (FAILED(HardwareResult))
+	if (UseWarp)
 	{
 		ComPtr<IDXGIAdapter> WarpAdapter;
 		Factory->EnumWarpAdapter(IID_PPV_ARGS(&WarpAdapter));
-		D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
+		D3D12CreateDevice(WarpAdapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&Device));
 	}
-#else
-	GetDevice(&Device);
-#endif
+	else
+	{
+		GetDevice(&Device);
+	}
 
 	Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
 	FenceEvent = CreateEvent(nullptr, 0, 0, nullptr);
@@ -67,10 +66,7 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 		Factory->CreateSwapChainForHwnd(CommandQueue.Get(), Window, &SwapChainDesc, nullptr, nullptr, _SwapChain.GetAddressOf());
 		_SwapChain.As(&SwapChain);
 	}
-};
 
-void d3d_app::OnInit() 
-{
 	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 
 	CommandsBegin();
@@ -88,13 +84,20 @@ void d3d_app::OnInit()
 		DsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 		Device->CreateDescriptorHeap(&DsvHeapDesc, IID_PPV_ARGS(&DsvHeap));
 
+		D3D12_DESCRIPTOR_HEAP_DESC ResourceHeapDesc = {};
+		ResourceHeapDesc.NumDescriptors = 4;
+		ResourceHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		ResourceHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+		HRESULT Res = Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&ResourceHeap));
+		ResourceViewSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
 		CD3DX12_CPU_DESCRIPTOR_HANDLE RtvHeapHandle(RtvHeap->GetCPUDescriptorHandleForHeapStart());
 		for (u32 Idx = 0;
 			Idx < 2;
 			++Idx)
 		{
-			SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx]));
-			Device->CreateRenderTargetView(BackBuffers[Idx].Get(), nullptr, RtvHeapHandle);
+			SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx].Handle));
+			Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapHandle);
 			RtvHeapHandle.Offset(1, RtvSize);
 		}
 
@@ -115,29 +118,20 @@ void d3d_app::OnInit()
 		Clear.DepthStencil.Depth = 1.0f;
 		Clear.DepthStencil.Stencil = 0;
 		auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer));
+		Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
 
-		Device->CreateDepthStencilView(DepthStencilBuffer.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
+		Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
 
-		auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+		auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 		CommandList->ResourceBarrier(1, &Barrier);
 	}
 	CommandsEnd();
 	Flush();
+};
 
+void d3d_app::CreateGraphicsPipeline(ID3D12RootSignature* RootSignature) 
+{
 	{
-		{
-			CD3DX12_ROOT_PARAMETER RootParameter = {};
-			RootParameter.InitAsUnorderedAccessView(0);
-			CD3DX12_ROOT_SIGNATURE_DESC RootSignatureDesc;
-			RootSignatureDesc.Init(1, &RootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-			ComPtr<ID3DBlob> Signature;
-			ComPtr<ID3DBlob> Error;
-			D3D12SerializeRootSignature(&RootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error);
-			Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&RootSignature));
-		}
-		
 		{
 			ComPtr<ID3DBlob> VertShader;
 			ComPtr<ID3DBlob> FragShader;
@@ -165,8 +159,8 @@ void d3d_app::OnInit()
 			RasterDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
-			PipelineDesc.InputLayout = {InputDesc, _countof(InputDesc)};
-			PipelineDesc.pRootSignature = RootSignature.Get();
+			PipelineDesc.InputLayout; // = {InputDesc, _countof(InputDesc)};
+			PipelineDesc.pRootSignature = RootSignature;
 			PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertShader.Get());
 			PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(FragShader.Get());
 			PipelineDesc.RasterizerState = RasterDesc;
@@ -185,18 +179,22 @@ void d3d_app::OnInit()
 	}
 }
 
-void d3d_app::BeginRender()
+void d3d_app::BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer)
 {
 	CommandsBegin(PipelineState.Get());
 
-	CommandList->SetGraphicsRootSignature(RootSignature.Get());
+	ID3D12DescriptorHeap* Heaps[] = {ResourceHeap.Get()};
+	CommandList->SetGraphicsRootSignature(RootSignature);
 	CommandList->SetPipelineState(PipelineState.Get());
+	CommandList->SetDescriptorHeaps(1, Heaps);
 
-	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Handle.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	CommandList->ResourceBarrier(1, &Barrier);
 
 	CommandList->RSSetViewports(1, &Viewport);
 	CommandList->RSSetScissorRects(1, &Rect);
+
+	CommandList->SetGraphicsRootShaderResourceView(0, Buffer.GpuPtr);
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE RenderViewHandle(RtvHeap->GetCPUDescriptorHandleForHeapStart(), BackBufferIndex, RtvSize);
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView = DsvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -233,7 +231,7 @@ void d3d_app::
 EndRender()
 {
 
-	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Handle.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 	CommandList->ResourceBarrier(1, &Barrier);
 
 	CommandsEnd();
@@ -300,9 +298,9 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 		Idx < 2;
 		++Idx)
 	{
-		BackBuffers[Idx].Reset();
+		BackBuffers[Idx].Handle.Reset();
 	}
-	DepthStencilBuffer.Reset();
+	DepthStencilBuffer.Handle.Reset();
 
 	SwapChain->ResizeBuffers(2, NewWidth, NewHeight, BackBufferFormat, (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	BackBufferIndex = 0;
@@ -312,8 +310,8 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 		Idx < 2;
 		++Idx)
 	{
-		SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx]));
-		Device->CreateRenderTargetView(BackBuffers[Idx].Get(), nullptr, RtvHeapHandle);
+		SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx].Handle));
+		Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapHandle);
 		RtvHeapHandle.Offset(1, RtvSize);
 	}
 
@@ -334,11 +332,11 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	Clear.DepthStencil.Depth = 1.0f;
 	Clear.DepthStencil.Stencil = 0;
 	auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-	Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer));
+	Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
 
-	Device->CreateDepthStencilView(DepthStencilBuffer.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
+	Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
 
-	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	CommandList->ResourceBarrier(1, &Barrier);
 
 	CommandsEnd();

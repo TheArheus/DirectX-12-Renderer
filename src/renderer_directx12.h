@@ -3,44 +3,19 @@
 using namespace Microsoft::WRL;
 using namespace DirectX;
 
-void GetDevice(ID3D12Device6** DeviceResult, bool HighPerformance = true)
-{
-	ComPtr<IDXGIFactory6> Factory;
-	*DeviceResult = nullptr;
-	CreateDXGIFactory1(IID_PPV_ARGS(&Factory));
-
-	UINT i = 0;
-	ComPtr<IDXGIAdapter1> pAdapter;
-	for (u32 AdapterIndex = 0;
-			Factory->EnumAdapterByGpuPreference(AdapterIndex, 
-				(HighPerformance ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_UNSPECIFIED), 
-				 IID_PPV_ARGS(&pAdapter)) != DXGI_ERROR_NOT_FOUND;
-		++AdapterIndex)
-	{
-		DXGI_ADAPTER_DESC1 Desc;
-		pAdapter->GetDesc1(&Desc);
-
-		if(SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device6), nullptr)))
-		{
-			break;
-		}
-	}
-
-	D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(DeviceResult));
-}
+#include "directx_utilities.hpp"
 
 struct buffer
 {
 	template<class T>
-	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, void* Data, u64 NewSize, u64 Offset) : Size(NewSize)
+	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, void* Data, u64 NewSize) : Size(NewSize)
 	{
+		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 		GetDevice(&Device);
 
-		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
-		ComPtr<ID3D12Resource> TempBuffer;
 
 		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
@@ -58,9 +33,128 @@ struct buffer
 		GpuPtr = Handle->GetGPUVirtualAddress();
 	}
 
+	template<class T>
+	buffer(std::unique_ptr<T>& App, void* Data, u64 NewSize) : Size(NewSize)
+	{
+		ComPtr<ID3D12Resource> TempBuffer;
+		ComPtr<ID3D12Device6> Device;
+		GetDevice(&Device);
+
+		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+
+		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
+		Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
+
+		void* CpuPtr;
+		TempBuffer->Map(0, nullptr, &CpuPtr);
+		memcpy(CpuPtr, Data, Size);
+		TempBuffer->Unmap(0, 0);
+
+		App->CommandsBegin();
+		App->CommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->CommandsEnd();
+		App->Flush();
+
+		GpuPtr = Handle->GetGPUVirtualAddress();
+	}
+
 	D3D12_GPU_VIRTUAL_ADDRESS GpuPtr = 0;
 	ComPtr<ID3D12Resource> Handle;
 	u64 Size;
+};
+
+struct texture
+{
+	texture() = default;
+
+	template<class T>
+	texture(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, void* Data, u64 NewWidth, u64 NewHeight, DXGI_FORMAT Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 MipLevels = 1, u64 Alignment = 0): Width(NewWidth), Height(NewHeight)
+	{
+		ComPtr<ID3D12Resource> TempBuffer;
+		ComPtr<ID3D12Device6> Device;
+		GetDevice(&Device);
+
+		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+
+		D3D12_RESOURCE_DESC ResourceDesc = {};
+		ResourceDesc.Format = Format;
+		ResourceDesc.Alignment = Alignment;
+		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		ResourceDesc.Width = Width;
+		ResourceDesc.Height = Height;
+		ResourceDesc.DepthOrArraySize = 1;
+		ResourceDesc.MipLevels = MipLevels;
+		ResourceDesc.SampleDesc.Count = 1;
+		ResourceDesc.SampleDesc.Quality = 0;
+		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+		D3D12_RESOURCE_ALLOCATION_INFO AllocInfo = Device->GetResourceAllocationInfo(0, 1, &ResourceDesc);
+
+		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
+		Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
+
+		u64 Size = Width * Height * GetFormatSize(Format);
+		void* CpuPtr;
+		TempBuffer->Map(0, nullptr, &CpuPtr);
+		memcpy(CpuPtr, Data, Size);
+		TempBuffer->Unmap(0, 0);
+
+		App->CommandsBegin();
+		App->CommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->CommandsEnd();
+		App->Flush();
+
+		GpuPtr = Handle->GetGPUVirtualAddress();
+	}
+
+	template<class T>
+	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, DXGI_FORMAT Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 MipLevels = 1, u64 Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE): Width(NewWidth), Height(NewHeight)
+	{
+		ComPtr<ID3D12Resource> TempBuffer;
+		ComPtr<ID3D12Device6> Device;
+		GetDevice(&Device);
+
+		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+
+		D3D12_RESOURCE_DESC ResourceDesc = {};
+		ResourceDesc.Format = Format;
+		ResourceDesc.Alignment = Alignment;
+		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		ResourceDesc.Width = Width;
+		ResourceDesc.Height = Height;
+		ResourceDesc.DepthOrArraySize = 1;
+		ResourceDesc.MipLevels = MipLevels;
+		ResourceDesc.SampleDesc.Count = 1;
+		ResourceDesc.SampleDesc.Quality = 0;
+		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		ResourceDesc.Flags = Flags;
+
+		D3D12_RESOURCE_ALLOCATION_INFO AllocInfo = Device->GetResourceAllocationInfo(0, 1, &ResourceDesc);
+
+		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
+		Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
+
+		u64 Size = Width * Height * GetFormatSize(Format);
+		void* CpuPtr;
+		TempBuffer->Map(0, nullptr, &CpuPtr);
+		memcpy(CpuPtr, Data, Size);
+		TempBuffer->Unmap(0, 0);
+
+		App->CommandsBegin();
+		App->CommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->CommandsEnd();
+		App->Flush();
+
+		GpuPtr = Handle->GetGPUVirtualAddress();
+	}
+
+	D3D12_GPU_VIRTUAL_ADDRESS GpuPtr = 0;
+	ComPtr<ID3D12Resource> Handle;
+	u64 Width;
+	u64 Height;
 };
 
 struct vertex_buffer_view
@@ -90,6 +184,11 @@ struct unordered_access_view
 struct sampler
 {
 	D3D12_SAMPLER_DESC Handle;
+};
+
+class resource_alloc
+{
+	ComPtr<ID3D12DescriptorHeap> Handle;
 };
 
 class d3d_app;
@@ -124,10 +223,30 @@ public:
 	{
 		u64 AlignedSize = AlignUp(DataSize, Alignment);
 		assert(AlignedSize + TotalSize <= Size);
-		buffer Buffer(App, Handle.Get(), Data, DataSize, BeginData);
+		buffer Buffer(App, Handle.Get(), BeginData, Data, DataSize);
 		BeginData += AlignedSize;
 		TotalSize += AlignedSize;
 		return Buffer;
+	}
+
+	buffer PushConstantBuffer(std::unique_ptr<d3d_app>& App, void* Data, u64 DataSize)
+	{
+		u64 AlignedSize = AlignUp(DataSize, 255);
+		assert(AlignedSize + TotalSize <= Size);
+		buffer Buffer(App, Handle.Get(), BeginData, Data, DataSize);
+		BeginData += AlignedSize;
+		TotalSize += AlignedSize;
+		return Buffer;
+	}
+
+	texture PushTexture2D(std::unique_ptr<d3d_app>& App, void* Data, u64 Width, u64 Height, DXGI_FORMAT Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 MipLevels = 1, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE)
+	{
+		u64 TextureAlignment = Alignment;
+		u64 AlignedSize = AlignUp(Width * Height * GetFormatSize(Format), TextureAlignment);
+		texture Texture(App, Handle.Get(), BeginData, Data, Width, Height, Format, MipLevels, Flags);
+		BeginData += AlignedSize;
+		TotalSize += AlignedSize;
+		return Texture;
 	}
 
 private:
@@ -158,12 +277,11 @@ class d3d_app
 	ComPtr<IDXGISwapChain4> SwapChain;
 	ComPtr<ID3D12DescriptorHeap> RtvHeap;
 	ComPtr<ID3D12DescriptorHeap> DsvHeap;
-	ComPtr<ID3D12Resource> BackBuffers[2];
-	ComPtr<ID3D12Resource> DepthStencilBuffer;
+	texture BackBuffers[2];
+	texture DepthStencilBuffer;
 	u32 RtvSize;
 	int BackBufferIndex = 0;
 
-	ComPtr<ID3D12RootSignature> RootSignature;
 	ComPtr<ID3D12PipelineState> PipelineState;
 
 	u64 CurrentFence = 0;
@@ -184,8 +302,8 @@ public:
 	void CommandsBegin(ID3D12PipelineState* PipelineState = nullptr);
 	void CommandsEnd();
 
-	void OnInit();
-	void BeginRender();
+	void CreateGraphicsPipeline(ID3D12RootSignature* RootSignature);
+	void BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer);
 	void Draw();
 	void DrawIndexed();
 	void EndRender();
@@ -201,6 +319,11 @@ public:
 
 	ComPtr<ID3D12Device6> Device;
 	ComPtr<ID3D12GraphicsCommandList> CommandList;
+
+	// NOTE: It is temporary desicion. 
+	// There will be its own allocator for descriptor heaps
+	ComPtr<ID3D12DescriptorHeap> ResourceHeap;
+	u32 ResourceViewSize;
 };
 
 #define RENDERER_DIRECTX_12_H_

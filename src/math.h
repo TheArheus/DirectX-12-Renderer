@@ -137,6 +137,21 @@ union v2
 	{
 		return (this->x == rhs.x) && (this->y == rhs.y);
 	}
+
+	r32 Dot(const v2& rhs)
+	{
+		return this->x * rhs.x + this->y * rhs.y;
+	}
+
+	r32 LengthSq()
+	{
+		return Dot(*this);
+	}
+
+	r32 Length()
+	{
+		return sqrtf(LengthSq());
+	}
 };
 
 template<typename T>
@@ -286,6 +301,21 @@ union v3
 	bool operator==(const v3& rhs) const
 	{
 		return (this->x == rhs.x) && (this->y == rhs.y) && (this->z && rhs.z);
+	}
+
+	r32 Dot(const v3& rhs)
+	{
+		return this->x * rhs.x + this->y * rhs.y + this->z * rhs.z;
+	}
+
+	r32 LengthSq()
+	{
+		return Dot(*this);
+	}
+
+	r32 Length()
+	{
+		return sqrtf(LengthSq());
 	}
 };
 
@@ -442,6 +472,21 @@ union v4
 	bool operator==(const v4& rhs) const
 	{
 		return (this->x == rhs.x) && (this->y == rhs.y) && (this->z && rhs.z) && (this->w && rhs.w);
+	}
+
+	r32 Dot(const v4& rhs)
+	{
+		return this->x * rhs.x + this->y * rhs.y + this->z * rhs.z + this->w * rhs.w;
+	}
+
+	r32 LengthSq()
+	{
+		return Dot(*this);
+	}
+
+	r32 Length()
+	{
+		return sqrtf(LengthSq());
 	}
 };
 

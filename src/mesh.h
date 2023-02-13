@@ -1,6 +1,12 @@
 #ifndef MESH_H_
 #define MESH_H_
 
+enum bounding_generation : u32
+{
+	generate_aabb = 0x1,
+	generate_sphere = 0x2,
+};
+
 struct vertex
 {
 	vech4 Position;
@@ -44,13 +50,31 @@ struct mesh
 		u32 IndexCount;
 	};
 
-	mesh(const std::string& Path);
-	mesh(std::initializer_list<std::string> Paths);
-	void Load(const std::string& Path);
+	struct sphere
+	{
+		vec3 Center;
+		float Radius;
+	};
+
+	struct aabb
+	{
+		vec3 Min;
+		vec3 Max;
+	};
+
+	mesh(const std::string& Path, u32 BoundingGeneration = 0);
+	mesh(std::initializer_list<std::string> Paths, u32 BoundingGeneration = 0);
+	void Load(const std::string& Path, u32 BoundingGeneration = 0);
+
+	void GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords);
+	void GenerateBoundingSphere();
 
 	std::vector<vertex> Vertices;
 	std::vector<u32> VertexIndices;
 	std::vector<offset> Offsets;
+
+	std::vector<sphere> BoundingSpheres;
+	std::vector<aabb> AABBs;
 };
 
 
