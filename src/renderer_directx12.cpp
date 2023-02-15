@@ -92,7 +92,7 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 		Device->CreateDescriptorHeap(&DsvHeapDesc, IID_PPV_ARGS(&DsvHeap));
 
 		D3D12_DESCRIPTOR_HEAP_DESC ResourceHeapDesc = {};
-		ResourceHeapDesc.NumDescriptors = 1;
+		ResourceHeapDesc.NumDescriptors = 2;
 		ResourceHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		ResourceHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&GfxResourceHeap));
@@ -126,7 +126,7 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 
 		D3D12_CLEAR_VALUE Clear = {};
 		Clear.Format = DepthBufferFormat;
-		Clear.DepthStencil.Depth = 1.0f;
+		Clear.DepthStencil.Depth = 0.0f;
 		Clear.DepthStencil.Stencil = 0;
 		auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
@@ -162,15 +162,25 @@ CreateGraphicsAndComputePipeline(ID3D12RootSignature* GfxRootSignature, ID3D12Ro
 			D3D12_RASTERIZER_DESC RasterDesc = {};
 			RasterDesc.FillMode = D3D12_FILL_MODE_SOLID;
 			RasterDesc.CullMode = D3D12_CULL_MODE_BACK;
-			RasterDesc.FrontCounterClockwise = FALSE;
+			RasterDesc.FrontCounterClockwise = true;
 			RasterDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
 			RasterDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
 			RasterDesc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-			RasterDesc.DepthClipEnable = FALSE;
-			RasterDesc.MultisampleEnable = FALSE;
-			RasterDesc.AntialiasedLineEnable = FALSE;
+			RasterDesc.DepthClipEnable = true;
+			RasterDesc.MultisampleEnable = false;
+			RasterDesc.AntialiasedLineEnable = false;
 			RasterDesc.ForcedSampleCount = 0;
 			RasterDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+			D3D12_DEPTH_STENCIL_DESC DepthStencilDesc = {};
+			DepthStencilDesc.DepthEnable = true;
+			DepthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+			DepthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
+			DepthStencilDesc.StencilEnable = false;
+			DepthStencilDesc.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+			DepthStencilDesc.StencilWriteMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+			DepthStencilDesc.FrontFace = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_ALWAYS};
+			DepthStencilDesc.BackFace = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_ALWAYS};
 
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
 			PipelineDesc.InputLayout = {InputDesc, _countof(InputDesc)};
@@ -179,7 +189,7 @@ CreateGraphicsAndComputePipeline(ID3D12RootSignature* GfxRootSignature, ID3D12Ro
 			PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(FragShader.Get());
 			PipelineDesc.RasterizerState = RasterDesc;
 			PipelineDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-			PipelineDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+			PipelineDesc.DepthStencilState = DepthStencilDesc;
 			PipelineDesc.SampleMask = UINT_MAX;
 			PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 			PipelineDesc.NumRenderTargets = 1;
@@ -198,7 +208,7 @@ CreateGraphicsAndComputePipeline(ID3D12RootSignature* GfxRootSignature, ID3D12Ro
 	}
 }
 
-void d3d_app::BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer)
+void d3d_app::BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer, const buffer& Buffer1)
 {
 	GfxCommandsBegin(GfxPipelineState.Get());
 
@@ -218,13 +228,15 @@ void d3d_app::BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buff
 	GfxCommandList->RSSetViewports(1, &Viewport);
 	GfxCommandList->RSSetScissorRects(1, &Rect);
 
+	//GfxCommandList->SetGraphicsRootConstantBufferView(1, Buffer1.GpuPtr);
+
 	CD3DX12_CPU_DESCRIPTOR_HANDLE RenderViewHandle(RtvHeap->GetCPUDescriptorHandleForHeapStart(), BackBufferIndex, RtvSize);
 	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView = DsvHeap->GetCPUDescriptorHandleForHeapStart();
-	GfxCommandList->OMSetRenderTargets(1, &RenderViewHandle, false, &DepthStencilView);
+	GfxCommandList->OMSetRenderTargets(1, &RenderViewHandle, true, &DepthStencilView);
 
 	float ClearColor[] = { 0.2f, 0.2f, 0.2f, 1.0f };
 	GfxCommandList->ClearRenderTargetView(RenderViewHandle, ClearColor, 0, nullptr);
-	GfxCommandList->ClearDepthStencilView(DsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+	GfxCommandList->ClearDepthStencilView(DsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
 	GfxCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 };
 
@@ -250,7 +262,7 @@ DrawIndexed()
 }
 
 void d3d_app::
-DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, buffer IndirectCommands)
+DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, const buffer& IndirectCommands)
 {
 	D3D12_VERTEX_BUFFER_VIEW VertexBufferView = {VertexBuffer.GpuPtr, static_cast<u32>(VertexBuffer.Size), sizeof(vertex)};
 	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {IndexBuffer.GpuPtr, static_cast<u32>(IndexBuffer.Size), DXGI_FORMAT_R32_UINT};
@@ -278,7 +290,7 @@ EndRender(const buffer& Buffer)
 }
 
 void d3d_app::
-BeginCompute(ID3D12RootSignature* RootSignature, buffer Buffer0, buffer Buffer1, buffer Buffer2, buffer Buffer3)
+BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3)
 {
 	CmpCommandsBegin(CmpPipelineState.Get());
 
@@ -308,7 +320,7 @@ Dispatch(u32 X, u32 Y, u32 Z)
 }
 
 void d3d_app::
-EndCompute(buffer Buffer0, buffer Buffer1)
+EndCompute(const buffer& Buffer0, const buffer& Buffer1)
 {
 	D3D12_RESOURCE_BARRIER barrier[] = 
 	{

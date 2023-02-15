@@ -12,7 +12,14 @@ struct mesh_draw_command_data
 	uint   MeshIndex;
 };
 
+struct world_update
+{
+	row_major float4x4 View;
+	row_major float4x4 Proj;
+};
+
 ConstantBuffer<mesh_draw_command_data> MeshDrawData : register(b0, space0);
+ConstantBuffer<world_update> WorldUpdate : register(b1, space0);
 
 struct vert_out
 {
@@ -28,6 +35,8 @@ vert_out main(vert_in In, uint Index : SV_VertexID)
 	float NormalZ = ((In.Normal & 0x0000ff00) >>  8);
 	float3 Normal = float3(NormalX, NormalY, NormalZ) / 127.0 - 1.0;
 	Out.Pos = In.Pos * float4(MeshDrawData.Scale, 1.0) + MeshDrawData.Translate;
+	Out.Pos = mul(WorldUpdate.Proj, Out.Pos);
+	Out.Pos = mul(WorldUpdate.View, Out.Pos);
 	Out.Col = float4(Normal * 0.5 + float3(0.5, 0.5, 0.5), 1.0);
 	return Out;
 }

@@ -1,5 +1,8 @@
 
 template<typename T>
+constexpr T Pi = 3.1415926535897932384626433832795028841971693993751058209749445923078164062;
+
+template<typename T>
 union v2
 {
 	struct
@@ -501,6 +504,113 @@ union mat4
 	};
 	float E[4][4];
 };
+
+mat4 Identity()
+{
+	mat4 Result = 
+	{
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1,
+	};
+
+	return Result;
+}
+
+mat4 Scale(float V)
+{
+	mat4 Result = Identity();
+	Result.E[0][0] = V;
+	Result.E[1][1] = V;
+	Result.E[2][2] = V;
+	return Result;
+}
+
+mat4 RotateX(float A)
+{
+	float s = sinf(A);
+	float c = cosf(A);
+	mat4 Result = 
+	{
+		1, 0,  0, 0,
+		0, c, -s, 0,
+		0, s,  c, 0,
+		0, 0,  0, 1,
+	};
+
+	return Result;
+}
+
+mat4 RotateY(float A)
+{
+	float s = sinf(A);
+	float c = cosf(A);
+	mat4 Result = 
+	{
+		 c, 0, s, 0,
+		 0, 1, 0, 0,
+		-s, 0, c, 0,
+		 0, 0, 0, 1,
+	};
+
+	return Result;
+}
+
+mat4 RotateZ(float A)
+{
+	float s = sinf(A);
+	float c = cosf(A);
+	mat4 Result = 
+	{
+		c, -s, 0, 0,
+		s,  c, 0, 0,
+		0,  0, 1, 0,
+		0,  0, 0, 1,
+	};
+
+	return Result;
+}
+
+mat4 Translate(float V)
+{
+	mat4 Result = Identity();
+	Result.E[0][3] = V;
+	Result.E[1][3] = V;
+	Result.E[2][3] = V;
+	return Result;
+}
+
+mat4 Perspective(float Fov, float Width, float Height, float NearZ, float FarZ)
+{
+	float a = Height / Width;
+	float f = 1.0f / tanf(Fov / 2.0f);
+	float l = FarZ / (NearZ - FarZ);
+	mat4 Result = 
+	{
+		a * f, 0, 0, 0,
+		0, f, 0, 0,
+		0, 0, l, l * NearZ,
+		0, 0, -1, 0,
+	};
+
+	return Result;
+}
+
+mat4 PerspectiveInfFarZ(float Fov, float Width, float Height, float NearZ)
+{
+	float a = Height / Width;
+	float f = 1.0 / tanf(Fov / 2.0);
+	mat4 Result = 
+	{
+		a * f, 0, 0, 0,
+		0, f, 0, 0,
+		0, 0, 0, NearZ,
+		0, 0, -1, 0,
+	};
+
+	return Result;
+}
 
 using vech2 = v2<u16>;
 using vech3 = v3<u16>;

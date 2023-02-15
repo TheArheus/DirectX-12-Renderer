@@ -2,6 +2,7 @@
 struct indirect_draw_command
 {
 	uint64_t BufferPtr;
+	uint64_t BufferPtr1;
 
 	uint VertexDraw_VertexCountPerInstance;
 	uint VertexDraw_DrawInstanceCount;
@@ -12,6 +13,7 @@ struct indirect_draw_command
 struct indirect_draw_indexed_command
 {
 	uint64_t BufferPtr;
+	uint64_t BufferPtr1;
 
 	uint IndexDraw_IndexCountPerInstance;
 	uint IndexDraw_InstanceCount;
@@ -47,11 +49,13 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 {
 	uint DrawIndex = ThreadGroupID.x * 32 + ThreadID.x;
 
+	//IndirectDrawCommands[DrawIndex].BufferPtr = (uint64_t)MeshDrawCommandData;
 	IndirectDrawCommands[DrawIndex].VertexDraw_VertexCountPerInstance = MeshOffsets[MeshDrawCommandData[DrawIndex].MeshIndex].VertexCount;
 	IndirectDrawCommands[DrawIndex].VertexDraw_DrawInstanceCount = 1;
 	IndirectDrawCommands[DrawIndex].VertexDraw_StartVertexLocation = MeshOffsets[MeshDrawCommandData[DrawIndex].MeshIndex].VertexOffset;
 	IndirectDrawCommands[DrawIndex].VertexDraw_StartInstanceLocation = 0;
 
+	//IndirectDrawIndexedCommands[DrawIndex].BufferPtr = (uint64_t)MeshDrawCommandData;
 	IndirectDrawIndexedCommands[DrawIndex].IndexDraw_IndexCountPerInstance = MeshOffsets[MeshDrawCommandData[DrawIndex].MeshIndex].IndexCount;
 	IndirectDrawIndexedCommands[DrawIndex].IndexDraw_InstanceCount = 1;
 	IndirectDrawIndexedCommands[DrawIndex].IndexDraw_StartIndexLocation = MeshOffsets[MeshDrawCommandData[DrawIndex].MeshIndex].IndexOffset;

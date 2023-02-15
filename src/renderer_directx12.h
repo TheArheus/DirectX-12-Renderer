@@ -8,15 +8,17 @@ using namespace DirectX;
 struct buffer
 {
 	template<class T>
-	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, void* Data, u64 NewSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, void* Data, u64 NewSize, u64 Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 		GetDevice(&Device);
 
+		u64 BufferSize = Alignment == 0 ? Size : AlignUp(Size, Alignment);
+		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
-		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
+		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
 
 		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
@@ -35,15 +37,17 @@ struct buffer
 	}
 
 	template<class T>
-	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, u64 NewSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, u64 NewSize, u64 Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 		GetDevice(&Device);
 
+		u64 BufferSize = Alignment == 0 ? Size : AlignUp(Size, Alignment);
+		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
-		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
+		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
 
 		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
@@ -52,16 +56,18 @@ struct buffer
 	}
 
 	template<class T>
-	buffer(std::unique_ptr<T>& App, void* Data, u64 NewSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+	buffer(std::unique_ptr<T>& App, void* Data, u64 NewSize, u64 Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 		GetDevice(&Device);
 
+		u64 BufferSize = Alignment == 0 ? Size : AlignUp(Size, Alignment);
+		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
-		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
+		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
 
 		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
@@ -80,16 +86,18 @@ struct buffer
 	}
 
 	template<class T>
-	buffer(std::unique_ptr<T>& App, u64 NewSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+	buffer(std::unique_ptr<T>& App, u64 NewSize, u64 Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 		GetDevice(&Device);
 
+		u64 BufferSize = Alignment == 0 ? Size : AlignUp(Size, Alignment);
+		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
-		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
+		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
 
 		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
@@ -256,21 +264,21 @@ public:
 		BeginData = 0;
 	}
 
-	buffer PushBuffer(std::unique_ptr<d3d_app>& App, void* Data, u64 DataSize)
+	buffer PushBuffer(std::unique_ptr<d3d_app>& App, void* Data, u64 DataSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE)
 	{
 		u64 AlignedSize = AlignUp(DataSize, Alignment);
 		assert(AlignedSize + TotalSize <= Size);
-		buffer Buffer(App, Handle.Get(), BeginData, Data, DataSize);
+		buffer Buffer(App, Handle.Get(), BeginData, Data, DataSize, 0, Flags);
 		BeginData += AlignedSize;
 		TotalSize += AlignedSize;
 		return Buffer;
 	}
 
-	buffer PushConstantBuffer(std::unique_ptr<d3d_app>& App, void* Data, u64 DataSize)
+	buffer PushConstantBuffer(std::unique_ptr<d3d_app>& App, void* Data, u64 DataSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE)
 	{
-		u64 AlignedSize = AlignUp(DataSize, 255);
+		u64 AlignedSize = AlignUp(DataSize, 256);
 		assert(AlignedSize + TotalSize <= Size);
-		buffer Buffer(App, Handle.Get(), BeginData, Data, DataSize);
+		buffer Buffer(App, Handle.Get(), BeginData, Data, DataSize, 256, Flags);
 		BeginData += AlignedSize;
 		TotalSize += AlignedSize;
 		return Buffer;
@@ -280,6 +288,7 @@ public:
 	{
 		u64 TextureAlignment = Alignment;
 		u64 AlignedSize = AlignUp(Width * Height * GetFormatSize(Format), TextureAlignment);
+		assert(AlignedSize + TotalSize <= Size);
 		texture Texture(App, Handle.Get(), BeginData, Data, Width, Height, Format, MipLevels, Flags);
 		BeginData += AlignedSize;
 		TotalSize += AlignedSize;
@@ -346,15 +355,15 @@ public:
 	void CmpCommandsEnd();
 
 	void CreateGraphicsAndComputePipeline(ID3D12RootSignature* GfxRootSignature, ID3D12RootSignature* CmpRootSignature);
-	void BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer);
+	void BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer, const buffer& Buffer1);
 	void Draw();
 	void DrawIndexed();
-	void DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, buffer IndirectCommands);
+	void DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, const buffer& IndirectCommands);
 	void EndRender(const buffer& Buffer);
 
-	void BeginCompute(ID3D12RootSignature* RootSignature, buffer Buffer0, buffer Buffer1, buffer Buffer2, buffer Buffer3);
+	void BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3);
 	void Dispatch(u32 X, u32 Y, u32 Z = 1);
-	void EndCompute(buffer Buffer0, buffer Buffer1);
+	void EndCompute(const buffer& Buffer0, const buffer& Buffer1);
 
 	void FenceSignal(ID3D12CommandQueue* CommandQueue);
 	void FenceWait();
