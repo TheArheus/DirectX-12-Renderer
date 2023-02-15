@@ -23,6 +23,14 @@ struct vertex
 	}
 };
 
+struct meshlet
+{
+	u32 Vertices[64];
+	u32 Indices[126*3];
+	u32 VertexCount;
+	u32 IndexCount;
+};
+
 namespace std
 {
 template<>
@@ -66,11 +74,14 @@ struct mesh
 	mesh(std::initializer_list<std::string> Paths, u32 BoundingGeneration = 0);
 	void Load(const std::string& Path, u32 BoundingGeneration = 0);
 
+	void GenerateMeshlets();
+
 	void GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords);
 	void GenerateBoundingSphere();
 
 	std::vector<vertex> Vertices;
 	std::vector<u32> VertexIndices;
+	std::vector<meshlet> Meshlets;
 	std::vector<offset> Offsets;
 
 	std::vector<sphere> BoundingSpheres;

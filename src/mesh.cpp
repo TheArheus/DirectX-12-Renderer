@@ -157,6 +157,11 @@ Load(const std::string& Path, u32 BoundingGeneration)
 }
 
 void mesh::
+GenerateMeshlets()
+{
+}
+
+void mesh::
 GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords)
 {
 	r32 MinX = FLT_MAX, MinY = FLT_MAX, MinZ = FLT_MAX;

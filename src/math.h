@@ -490,6 +490,18 @@ union v4
 	}
 };
 
+union mat4
+{
+	struct
+	{
+		float E11, E12, E13, E14;
+		float E21, E22, E23, E24;
+		float E31, E32, E33, E34;
+		float E41, E42, E43, E44;
+	};
+	float E[4][4];
+};
+
 using vech2 = v2<u16>;
 using vech3 = v3<u16>;
 using vech4 = v4<u16>;

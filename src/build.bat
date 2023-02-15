@@ -16,6 +16,7 @@ rem )
 
 dxc.exe "..\shaders\mesh.vert.hlsl" -E main -T vs_6_6 -enable-16bit-types -Fo "..\build\mesh.vert.cso"
 dxc.exe "..\shaders\mesh.frag.hlsl" -E main -T ps_6_6 -Fo "..\build\mesh.frag.cso"
+dxc.exe "..\shaders\indirect.comp.hlsl" -E main -T cs_6_6 -Fo "..\build\indirect.comp.cso"
 if not exist ..\build\ mkdir ..\build\
 pushd ..\build\
 cl %CommonCompFlags% user32.lib kernel32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib dxcompiler.lib %CppFiles% %OneFile% /link %CommonLinkFlags%

@@ -8,16 +8,17 @@ using namespace DirectX;
 struct buffer
 {
 	template<class T>
-	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, void* Data, u64 NewSize) : Size(NewSize)
+	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, void* Data, u64 NewSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 		GetDevice(&Device);
 
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
+		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
 
-		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
+		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
 
 		void* CpuPtr;
@@ -25,16 +26,33 @@ struct buffer
 		memcpy(CpuPtr, Data, Size);
 		TempBuffer->Unmap(0, 0);
 
-		App->CommandsBegin();
-		App->CommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->CommandsEnd();
-		App->Flush();
+		App->GfxCommandsBegin();
+		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandsEnd();
+		App->GfxFlush();
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
 	}
 
 	template<class T>
-	buffer(std::unique_ptr<T>& App, void* Data, u64 NewSize) : Size(NewSize)
+	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, u64 NewSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+	{
+		ComPtr<ID3D12Resource> TempBuffer;
+		ComPtr<ID3D12Device6> Device;
+		GetDevice(&Device);
+
+		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
+		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+
+		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
+		Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
+
+		GpuPtr = Handle->GetGPUVirtualAddress();
+	}
+
+	template<class T>
+	buffer(std::unique_ptr<T>& App, void* Data, u64 NewSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
@@ -42,9 +60,10 @@ struct buffer
 
 		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
+		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
 
-		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
+		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
 
 		void* CpuPtr;
@@ -52,10 +71,28 @@ struct buffer
 		memcpy(CpuPtr, Data, Size);
 		TempBuffer->Unmap(0, 0);
 
-		App->CommandsBegin();
-		App->CommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->CommandsEnd();
-		App->Flush();
+		App->GfxCommandsBegin();
+		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandsEnd();
+		App->GfxFlush();
+
+		GpuPtr = Handle->GetGPUVirtualAddress();
+	}
+
+	template<class T>
+	buffer(std::unique_ptr<T>& App, u64 NewSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+	{
+		ComPtr<ID3D12Resource> TempBuffer;
+		ComPtr<ID3D12Device6> Device;
+		GetDevice(&Device);
+
+		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(Size, Flags);
+		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
+
+		Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
+		Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
 	}
@@ -101,10 +138,10 @@ struct texture
 		memcpy(CpuPtr, Data, Size);
 		TempBuffer->Unmap(0, 0);
 
-		App->CommandsBegin();
-		App->CommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->CommandsEnd();
-		App->Flush();
+		App->GfxCommandsBegin();
+		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandsEnd();
+		App->GfxFlush();
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
 	}
@@ -143,10 +180,10 @@ struct texture
 		memcpy(CpuPtr, Data, Size);
 		TempBuffer->Unmap(0, 0);
 
-		App->CommandsBegin();
-		App->CommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->CommandsEnd();
-		App->Flush();
+		App->GfxCommandsBegin();
+		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandsEnd();
+		App->GfxFlush();
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
 	}
@@ -272,8 +309,10 @@ class d3d_app
     const DXGI_FORMAT DepthBufferFormat = DXGI_FORMAT_D32_FLOAT;
 
 	ComPtr<IDXGIFactory6> Factory;
-	ComPtr<ID3D12CommandQueue> CommandQueue;
-	ComPtr<ID3D12CommandAllocator> CommandAlloc;
+	ComPtr<ID3D12CommandQueue> GfxCommandQueue;
+	ComPtr<ID3D12CommandQueue> CmpCommandQueue;
+	ComPtr<ID3D12CommandAllocator> GfxCommandAlloc;
+	ComPtr<ID3D12CommandAllocator> CmpCommandAlloc;
 	ComPtr<IDXGISwapChain4> SwapChain;
 	ComPtr<ID3D12DescriptorHeap> RtvHeap;
 	ComPtr<ID3D12DescriptorHeap> DsvHeap;
@@ -282,7 +321,8 @@ class d3d_app
 	u32 RtvSize;
 	int BackBufferIndex = 0;
 
-	ComPtr<ID3D12PipelineState> PipelineState;
+	ComPtr<ID3D12PipelineState> GfxPipelineState;
+	ComPtr<ID3D12PipelineState> CmpPipelineState;
 
 	u64 CurrentFence = 0;
 	ComPtr<ID3D12Fence> Fence;
@@ -299,18 +339,27 @@ public:
 	void PushVertexData(buffer* VertexBuffer, std::vector<mesh::offset>& Offsets);
 	void PushIndexedVertexData(buffer* VertexBuffer, buffer* IndexBuffer, std::vector<mesh::offset>& Offsets);
 
-	void CommandsBegin(ID3D12PipelineState* PipelineState = nullptr);
-	void CommandsEnd();
+	void GfxCommandsBegin(ID3D12PipelineState* PipelineState = nullptr);
+	void GfxCommandsEnd();
 
-	void CreateGraphicsPipeline(ID3D12RootSignature* RootSignature);
+	void CmpCommandsBegin(ID3D12PipelineState* PipelineState = nullptr);
+	void CmpCommandsEnd();
+
+	void CreateGraphicsAndComputePipeline(ID3D12RootSignature* GfxRootSignature, ID3D12RootSignature* CmpRootSignature);
 	void BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer);
 	void Draw();
 	void DrawIndexed();
-	void EndRender();
+	void DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, buffer IndirectCommands);
+	void EndRender(const buffer& Buffer);
 
-	void FenceSignal();
+	void BeginCompute(ID3D12RootSignature* RootSignature, buffer Buffer0, buffer Buffer1, buffer Buffer2, buffer Buffer3);
+	void Dispatch(u32 X, u32 Y, u32 Z = 1);
+	void EndCompute(buffer Buffer0, buffer Buffer1);
+
+	void FenceSignal(ID3D12CommandQueue* CommandQueue);
 	void FenceWait();
-	void Flush();
+	void GfxFlush();
+	void CmpFlush();
 
 	u32 Width;
 	u32 Height;
@@ -318,12 +367,14 @@ public:
 	double RefreshRate;
 
 	ComPtr<ID3D12Device6> Device;
-	ComPtr<ID3D12GraphicsCommandList> CommandList;
+	ComPtr<ID3D12GraphicsCommandList> GfxCommandList;
+	ComPtr<ID3D12GraphicsCommandList> CmpCommandList;
 
 	// NOTE: It is temporary desicion. 
 	// There will be its own allocator for descriptor heaps
-	ComPtr<ID3D12DescriptorHeap> ResourceHeap;
-	u32 ResourceViewSize;
+	ComPtr<ID3D12DescriptorHeap> GfxResourceHeap;
+	ComPtr<ID3D12DescriptorHeap> CmpResourceHeap;
+	u32 ResourceHeapIncrement;
 };
 
 #define RENDERER_DIRECTX_12_H_
