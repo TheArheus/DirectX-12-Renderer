@@ -584,14 +584,14 @@ mat4 Translate(float V)
 mat4 Perspective(float Fov, float Width, float Height, float NearZ, float FarZ)
 {
 	float a = Height / Width;
-	float f = 1.0f / tanf(Fov / 2.0f);
+	float f = cosf(0.5f * Fov) / sinf(0.5f * Fov);
 	float l = FarZ / (NearZ - FarZ);
 	mat4 Result = 
 	{
-		a * f, 0, 0, 0,
-		0, f, 0, 0,
-		0, 0, l, l * NearZ,
-		0, 0, -1, 0,
+		f*a, 0,  0, 0,
+		 0,  f,  0, 0,
+		 0,  0,  l, l * NearZ,
+		 0,  0, -1, 0,
 	};
 
 	return Result;
@@ -603,10 +603,10 @@ mat4 PerspectiveInfFarZ(float Fov, float Width, float Height, float NearZ)
 	float f = 1.0 / tanf(Fov / 2.0);
 	mat4 Result = 
 	{
-		a * f, 0, 0, 0,
-		0, f, 0, 0,
-		0, 0, 0, NearZ,
-		0, 0, -1, 0,
+		f*a, 0,  0, 0,
+		 0,  f,  0, 0,
+		 0,  0,  0, NearZ,
+		 0,  0, -1, 0,
 	};
 
 	return Result;

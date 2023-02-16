@@ -9,6 +9,8 @@ struct mesh_draw_command_data
 {
 	float4 Translate;
 	float3 Scale;
+	uint64_t Pad0;
+	uint64_t Pad1;
 	uint   MeshIndex;
 };
 

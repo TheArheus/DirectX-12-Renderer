@@ -96,7 +96,7 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 		ResourceHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		ResourceHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&GfxResourceHeap));
-		ResourceHeapDesc.NumDescriptors = 4;
+		ResourceHeapDesc.NumDescriptors = 5;
 		ResourceHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		ResourceHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&CmpResourceHeap));
@@ -290,7 +290,7 @@ EndRender(const buffer& Buffer)
 }
 
 void d3d_app::
-BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3)
+BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3, const buffer& Buffer4)
 {
 	CmpCommandsBegin(CmpPipelineState.Get());
 
@@ -304,6 +304,7 @@ BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const bu
 	CmpCommandList->SetComputeRootShaderResourceView(1, Buffer1.GpuPtr);
 	CmpCommandList->SetComputeRootUnorderedAccessView(2, Buffer2.GpuPtr);
 	CmpCommandList->SetComputeRootUnorderedAccessView(3, Buffer3.GpuPtr);
+	CmpCommandList->SetComputeRootUnorderedAccessView(4, Buffer4.GpuPtr);
 
 	D3D12_RESOURCE_BARRIER barrier[] = 
 	{

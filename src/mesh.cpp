@@ -140,20 +140,20 @@ Load(const std::string& Path, u32 BoundingGeneration)
 
 	VertexIndices.insert(VertexIndices.end(), Indices.begin(), Indices.end());
 
-	NewOffset.VertexCount = UniqueVertices.size();
-	NewOffset.IndexCount = Indices.size();
-	Offsets.push_back(NewOffset);
-
 	if(BoundingGeneration & generate_aabb)
 	{
-		GenerateAxisAlignedBoundingBox(Coords);
+		NewOffset.AABB = GenerateAxisAlignedBoundingBox(Coords);
 	}
 	// NOTE: This bounding sphere could be generated only if
 	// aabb is genearted.
 	if(BoundingGeneration & (generate_aabb | generate_sphere))
 	{
-		GenerateBoundingSphere();
+		NewOffset.BoundingSphere = GenerateBoundingSphere(NewOffset.AABB);
 	}
+
+	NewOffset.VertexCount = UniqueVertices.size();
+	NewOffset.IndexCount = Indices.size();
+	Offsets.push_back(NewOffset);
 }
 
 void mesh::
@@ -161,7 +161,7 @@ GenerateMeshlets()
 {
 }
 
-void mesh::
+mesh::aabb mesh::
 GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords)
 {
 	r32 MinX = FLT_MAX, MinY = FLT_MAX, MinZ = FLT_MAX;
@@ -177,17 +177,16 @@ GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords)
 		if(Coord.z > MaxZ) MaxZ = Coord.z;
 	}
 
-	aabb AABB = {{MinX, MinY, MinZ}, {MaxX, MaxY, MaxZ}};
-	AABBs.push_back(AABB);
+	aabb AABB = {{MinX, MinY, MinZ, 0}, {MaxX, MaxY, MaxZ, 0}};
+	return AABB;
 }
 
-void mesh::
-GenerateBoundingSphere()
+mesh::sphere mesh::
+GenerateBoundingSphere(mesh::aabb AABB)
 {
-	aabb AABB = AABBs.back();
 	sphere BoundingSphere = {};
 	BoundingSphere.Center = (AABB.Max + AABB.Min) * 0.5f;
 	BoundingSphere.Radius = (AABB.Max - BoundingSphere.Center).Length();
-	BoundingSpheres.push_back(BoundingSphere);
+	return BoundingSphere;
 }
 

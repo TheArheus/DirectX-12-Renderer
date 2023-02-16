@@ -49,25 +49,29 @@ struct hash<vertex>
 
 struct mesh
 {
-	struct offset
-	{
-		u32 VertexOffset;
-		u32 VertexCount;
-
-		u32 IndexOffset;
-		u32 IndexCount;
-	};
 
 	struct sphere
 	{
-		vec3 Center;
+		vec4 Center;
 		float Radius;
 	};
 
 	struct aabb
 	{
-		vec3 Min;
-		vec3 Max;
+		vec4 Min;
+		vec4 Max;
+	};
+
+	struct offset
+	{
+		aabb AABB;
+		sphere BoundingSphere;
+
+		u32 VertexOffset;
+		u32 VertexCount;
+
+		u32 IndexOffset;
+		u32 IndexCount;
 	};
 
 	mesh(const std::string& Path, u32 BoundingGeneration = 0);
@@ -76,16 +80,13 @@ struct mesh
 
 	void GenerateMeshlets();
 
-	void GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords);
-	void GenerateBoundingSphere();
+	aabb GenerateAxisAlignedBoundingBox(const std::vector<vec3>& Coords);
+	sphere GenerateBoundingSphere(mesh::aabb AABB);
 
 	std::vector<vertex> Vertices;
 	std::vector<u32> VertexIndices;
 	std::vector<meshlet> Meshlets;
 	std::vector<offset> Offsets;
-
-	std::vector<sphere> BoundingSpheres;
-	std::vector<aabb> AABBs;
 };
 
 
