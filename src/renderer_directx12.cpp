@@ -262,13 +262,13 @@ DrawIndexed()
 }
 
 void d3d_app::
-DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, const buffer& IndirectCommands)
+DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, const buffer& IndirectCommands, u32 CounterOffset)
 {
 	D3D12_VERTEX_BUFFER_VIEW VertexBufferView = {VertexBuffer.GpuPtr, static_cast<u32>(VertexBuffer.Size), sizeof(vertex)};
 	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {IndexBuffer.GpuPtr, static_cast<u32>(IndexBuffer.Size), DXGI_FORMAT_R32_UINT};
 	GfxCommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
 	GfxCommandList->IASetIndexBuffer(&IndexBufferView);
-	GfxCommandList->ExecuteIndirect(CommandSignature, DrawCount, IndirectCommands.Handle.Get(), 0, nullptr, 0);
+	GfxCommandList->ExecuteIndirect(CommandSignature, DrawCount, IndirectCommands.Handle.Get(), 0, IndirectCommands.Handle.Get(), CounterOffset);
 }
 
 void d3d_app::
@@ -290,8 +290,10 @@ EndRender(const buffer& Buffer)
 }
 
 void d3d_app::
-BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3, const buffer& Buffer4)
+BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3, const buffer& Buffer4, const buffer& ZeroBuffer, u32 CounterOffset0, u32 CounterOffset1)
 {
+	D3D12_GPU_DESCRIPTOR_HANDLE CmpResourceHeapHandle = CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
+
 	CmpCommandsBegin(CmpPipelineState.Get());
 
 	CmpCommandList->SetComputeRootSignature(RootSignature);
@@ -300,16 +302,18 @@ BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const bu
 	ID3D12DescriptorHeap* Heaps[] = { CmpResourceHeap.Get() };
 	CmpCommandList->SetDescriptorHeaps(1, Heaps);
 
-	CmpCommandList->SetComputeRootShaderResourceView(0, Buffer0.GpuPtr);
-	CmpCommandList->SetComputeRootShaderResourceView(1, Buffer1.GpuPtr);
-	CmpCommandList->SetComputeRootUnorderedAccessView(2, Buffer2.GpuPtr);
-	CmpCommandList->SetComputeRootUnorderedAccessView(3, Buffer3.GpuPtr);
-	CmpCommandList->SetComputeRootUnorderedAccessView(4, Buffer4.GpuPtr);
+	CmpCommandList->SetComputeRootDescriptorTable(0, CmpResourceHeapHandle);
+	CmpResourceHeapHandle.ptr += 2 * ResourceHeapIncrement;
+	CmpCommandList->SetComputeRootDescriptorTable(1, CmpResourceHeapHandle);
+	CmpCommandList->SetComputeRootUnorderedAccessView(2, Buffer4.GpuPtr);
+
+	CmpCommandList->CopyBufferRegion(Buffer2.Handle.Get(), CounterOffset0, ZeroBuffer.Handle.Get(), 0, sizeof(u32));
+	CmpCommandList->CopyBufferRegion(Buffer3.Handle.Get(), CounterOffset1, ZeroBuffer.Handle.Get(), 0, sizeof(u32));
 
 	D3D12_RESOURCE_BARRIER barrier[] = 
 	{
-		CD3DX12_RESOURCE_BARRIER::Transition(Buffer2.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-		CD3DX12_RESOURCE_BARRIER::Transition(Buffer3.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+		CD3DX12_RESOURCE_BARRIER::Transition(Buffer2.Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+		CD3DX12_RESOURCE_BARRIER::Transition(Buffer3.Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
 	};
 	CmpCommandList->ResourceBarrier(2, barrier);
 }

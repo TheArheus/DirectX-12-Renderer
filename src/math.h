@@ -624,6 +624,42 @@ using veci2 = v2<s32>;
 using veci3 = v3<s32>;
 using veci4 = v4<s32>;
 
+struct plane
+{
+	vec3 Pos;
+	u32  Pad0;
+	vec3 Norm;
+	u32  Pad1;
+};
+
+void GeneratePlanes(plane* Planes, mat4 Proj, float NearZ, float FarZ)
+{
+	FarZ = (FarZ < NearZ) ? NearZ : FarZ;
+	Planes[0].Pos = vec3(0);
+	Planes[0].Norm = vec3(Proj.E41 + Proj.E11, Proj.E42 + Proj.E12, Proj.E43 + Proj.E13);
+	Planes[0].Norm /= Planes[0].Norm.Length();
+
+	Planes[1].Pos = vec3(0);
+	Planes[1].Norm = vec3(Proj.E41 - Proj.E11, Proj.E42 - Proj.E12, Proj.E43 - Proj.E13);
+	Planes[1].Norm /= Planes[1].Norm.Length();
+
+	Planes[2].Pos = vec3(0);
+	Planes[2].Norm = vec3(Proj.E41 + Proj.E21, Proj.E42 + Proj.E22, Proj.E43 + Proj.E23);
+	Planes[2].Norm /= Planes[2].Norm.Length();
+
+	Planes[3].Pos = vec3(0);
+	Planes[3].Norm = vec3(Proj.E41 - Proj.E21, Proj.E42 - Proj.E22, Proj.E43 - Proj.E23);
+	Planes[3].Norm /= Planes[3].Norm.Length();
+
+	Planes[4].Pos = vec3(0, 0, NearZ);
+	Planes[4].Norm = vec3(Proj.E41 + Proj.E31, Proj.E42 + Proj.E32, Proj.E43 + Proj.E33);
+	Planes[4].Norm /= Planes[4].Norm.Length();
+	
+	Planes[5].Pos = vec3(0, 0, FarZ);
+	Planes[5].Norm = vec3(Proj.E41 - Proj.E31, Proj.E42 - Proj.E32, Proj.E43 - Proj.E33);
+	Planes[5].Norm /= Planes[5].Norm.Length();
+}
+
 namespace std
 {
 	// NOTE: got from stack overflow question

@@ -405,10 +405,10 @@ public:
 	void BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer, const buffer& Buffer1);
 	void Draw();
 	void DrawIndexed();
-	void DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, const buffer& IndirectCommands);
+	void DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, const buffer& IndirectCommands, u32 CounterOffset = 0);
 	void EndRender(const buffer& Buffer);
 
-	void BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3, const buffer& Buffer4);
+	void BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3, const buffer& Buffer4, const buffer& ZeroBuffer, u32 CounterOffset0 = 0, u32 CounterOffset1 = 0);
 	void Dispatch(u32 X, u32 Y, u32 Z = 1);
 	void EndCompute(const buffer& Buffer0, const buffer& Buffer1);
 

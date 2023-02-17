@@ -38,14 +38,6 @@ struct world_update
 	mat4 Proj;
 };
 
-struct plane
-{
-	vec3 Pos;
-	u32  Pad0;
-	vec3 Norm;
-	u32  Pad1;
-};
-
 struct mesh_comp_culling_common_input
 {
 	plane CullingPlanes[6];
@@ -53,32 +45,231 @@ struct mesh_comp_culling_common_input
 	u32 FrustrumCullingEnabled;
 };
 
-void GeneratePlanes(plane* Planes, mat4 Proj, float NearZ)
+// NOTE: This could be unified with descriptor heap allocator
+class shader_input
 {
-	Planes[0].Pos = vec3(0);
-	Planes[0].Norm = vec3(Proj.E41 + Proj.E11, Proj.E42 + Proj.E12, Proj.E43 + Proj.E13);
-	Planes[0].Norm /= Planes[0].Norm.Length();
+	std::vector<D3D12_ROOT_PARAMETER1> Parameters;
 
-	Planes[1].Pos = vec3(0);
-	Planes[1].Norm = vec3(Proj.E41 - Proj.E11, Proj.E42 - Proj.E12, Proj.E43 - Proj.E13);
-	Planes[1].Norm /= Planes[1].Norm.Length();
+	// TODO: Shader Visibility
+public:
+	shader_input* PushShaderResource(u32 Register, u32 Space, D3D12_ROOT_DESCRIPTOR_FLAGS Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC)
+	{
+		D3D12_ROOT_PARAMETER1 Parameter = {};
+		Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		Parameter.Descriptor = {Register, Space, Flags};
+		Parameters.push_back(Parameter);
 
-	Planes[2].Pos = vec3(0);
-	Planes[2].Norm = vec3(Proj.E41 + Proj.E21, Proj.E42 + Proj.E22, Proj.E43 + Proj.E23);
-	Planes[2].Norm /= Planes[2].Norm.Length();
+		return this;
+	}
 
-	Planes[3].Pos = vec3(0);
-	Planes[3].Norm = vec3(Proj.E41 - Proj.E21, Proj.E42 - Proj.E22, Proj.E43 - Proj.E23);
-	Planes[3].Norm /= Planes[3].Norm.Length();
+	shader_input* PushConstantBuffer(u32 Register, u32 Space, D3D12_ROOT_DESCRIPTOR_FLAGS Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC)
+	{
+		D3D12_ROOT_PARAMETER1 Parameter = {};
+		Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		Parameter.Descriptor = {Register, Space, Flags};
+		Parameters.push_back(Parameter);
 
-	Planes[4].Pos = vec3(0, 0, NearZ);
-	Planes[4].Norm = vec3(Proj.E41 + Proj.E31, Proj.E42 + Proj.E32, Proj.E43 + Proj.E33);
-	Planes[4].Norm /= Planes[4].Norm.Length();
-	
-	Planes[5].Pos = vec3(0, 0, NearZ);
-	Planes[5].Norm = vec3(Proj.E41 - Proj.E31, Proj.E42 - Proj.E32, Proj.E43 - Proj.E33);
-	Planes[5].Norm /= Planes[5].Norm.Length();
-}
+		return this;
+	}
+
+	shader_input* PushUnorderedAccess(u32 Register, u32 Space, D3D12_ROOT_DESCRIPTOR_FLAGS Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC)
+	{
+		D3D12_ROOT_PARAMETER1 Parameter = {};
+		Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
+		Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		Parameter.Descriptor = {Register, Space, Flags};
+		Parameters.push_back(Parameter);
+
+		return this;
+	}
+
+	shader_input* PushShaderResourceTable(u32 Start, u32 Count, u32 Space, D3D12_DESCRIPTOR_RANGE_FLAGS Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC)
+	{
+		// NOTE: don't like this solution. 
+		// Maybe there could be something better?
+		D3D12_DESCRIPTOR_RANGE1* ParameterRange = new D3D12_DESCRIPTOR_RANGE1;
+		ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		ParameterRange->BaseShaderRegister = Start;
+		ParameterRange->NumDescriptors = Count;
+		ParameterRange->RegisterSpace = Space;
+		ParameterRange->Flags = Flags;
+		ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_ROOT_PARAMETER1 Parameter = {};
+		Parameter.DescriptorTable = {1, ParameterRange};
+
+		Parameters.push_back(Parameter);
+
+		return this;
+	}
+
+	shader_input* PushConstantBufferTable(u32 Start, u32 Count, u32 Space, D3D12_DESCRIPTOR_RANGE_FLAGS Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC)
+	{
+		D3D12_DESCRIPTOR_RANGE1* ParameterRange = new D3D12_DESCRIPTOR_RANGE1;
+		ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+		ParameterRange->BaseShaderRegister = Start;
+		ParameterRange->NumDescriptors = Count;
+		ParameterRange->RegisterSpace = Space;
+		ParameterRange->Flags = Flags;
+		ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_ROOT_PARAMETER1 Parameter = {};
+		Parameter.DescriptorTable = {1, ParameterRange};
+
+		Parameters.push_back(Parameter);
+
+		return this;
+	}
+
+	shader_input* PushUnorderedAccessTable(u32 Start, u32 Count, u32 Space, D3D12_DESCRIPTOR_RANGE_FLAGS Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC)
+	{
+		D3D12_DESCRIPTOR_RANGE1* ParameterRange = new D3D12_DESCRIPTOR_RANGE1;
+		ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+		ParameterRange->BaseShaderRegister = Start;
+		ParameterRange->NumDescriptors = Count;
+		ParameterRange->RegisterSpace = Space;
+		ParameterRange->Flags = Flags;
+		ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		D3D12_ROOT_PARAMETER1 Parameter = {};
+		Parameter.DescriptorTable = {1, ParameterRange};
+
+		Parameters.push_back(Parameter);
+
+		return this;
+	}
+
+	void Build(ID3D12Device1* Device, D3D12_ROOT_SIGNATURE_FLAGS Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE)
+	{
+		CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC RootSignatureDesc;
+		RootSignatureDesc.Init_1_1(Parameters.size(), Parameters.data(), 0, nullptr, Flags);
+
+		ComPtr<ID3DBlob> Signature;
+		ComPtr<ID3DBlob> Error;
+		HRESULT Res = D3DX12SerializeVersionedRootSignature(&RootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, &Signature, &Error);
+		Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Handle));
+	}
+
+	ComPtr<ID3D12RootSignature> Handle;
+};
+
+class indirect_command_signature
+{
+	std::vector<D3D12_INDIRECT_ARGUMENT_DESC> Parameters;
+
+public:
+
+	indirect_command_signature* PushCommandDraw()
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+		Parameters.push_back(Parameter);
+		return this;
+	}
+
+	indirect_command_signature* PushCommandDrawIndexed()
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
+		Parameters.push_back(Parameter);
+		return this;
+	}
+
+	indirect_command_signature* PushCommandDispatch()
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+		Parameters.push_back(Parameter);
+		return this;
+	}	
+
+	indirect_command_signature* PushCommandDispatchMesh()
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH;
+		Parameters.push_back(Parameter);
+		return this;
+	}	
+
+	indirect_command_signature* PushCommandDispatchRays()
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
+		Parameters.push_back(Parameter);
+		return this;
+	}	
+
+	indirect_command_signature* PushShaderResource(u32 RootParameterIndex)
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW;
+		Parameter.ShaderResourceView.RootParameterIndex = RootParameterIndex;
+		Parameters.push_back(Parameter);
+		return this;
+	}
+
+	indirect_command_signature* PushConstantBuffer(u32 RootParameterIndex)
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
+		Parameter.ConstantBufferView.RootParameterIndex = RootParameterIndex;
+		Parameters.push_back(Parameter);
+		return this;
+	}
+
+	indirect_command_signature* PushConstant(u32 RootParameterIndex)
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
+		Parameter.Constant.RootParameterIndex = RootParameterIndex;
+		Parameters.push_back(Parameter);
+		return this;
+	}
+
+	indirect_command_signature* PushUnorderedAccess(u32 RootParameterIndex)
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
+		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW;
+		Parameter.UnorderedAccessView.RootParameterIndex = RootParameterIndex;
+		Parameters.push_back(Parameter);
+		return this;
+	}
+
+	void Build(ID3D12Device1* Device, ID3D12RootSignature* RootSignature, u32 IndirectCommandSize)
+	{
+		D3D12_COMMAND_SIGNATURE_DESC CommandSignatureDesc = {};
+		CommandSignatureDesc.pArgumentDescs = Parameters.data();
+		CommandSignatureDesc.NumArgumentDescs = Parameters.size();
+		CommandSignatureDesc.ByteStride = IndirectCommandSize;
+		Device->CreateCommandSignature(&CommandSignatureDesc, RootSignature, IID_PPV_ARGS(&Handle));
+	}
+
+	ComPtr<ID3D12CommandSignature> Handle;
+};
+
+class descriptor_heap
+{
+	u32 Size;
+	u32 Total;
+
+public:
+	descriptor_heap(ID3D12Device1* Device, u32 NumberOfDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE Type, D3D12_DESCRIPTOR_HEAP_FLAGS Flags)
+	{
+		D3D12_DESCRIPTOR_HEAP_DESC HeapDesc = {};
+		HeapDesc.NumDescriptors = NumberOfDescriptors;
+		HeapDesc.Type = Type;
+		HeapDesc.Flags = Flags;
+		Device->CreateDescriptorHeap(&HeapDesc, IID_PPV_ARGS(&Handle));
+	}
+
+	u32 AllocInc;
+	D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle;
+	D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle;
+
+	ComPtr<ID3D12DescriptorHeap> Handle;
+};
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {	
@@ -88,7 +279,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	srand(512);
 	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
 
-	mesh Geometries({"..\\assets\\kitten.obj"}, generate_aabb | generate_sphere);
+	mesh Geometries({"..\\assets\\kitten.obj", "..\\assets\\stanford-bunny.obj"}, generate_aabb | generate_sphere);
 	std::vector<mesh_draw_command_input> MeshDrawCommandData(DrawCount);
 	std::vector<indirect_draw_command> IndirectDrawCommandVector(DrawCount);
 	std::vector<indirect_draw_indexed_command> IndirectDrawIndexedCommandVector(DrawCount);
@@ -96,18 +287,19 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	memory_heap VertexHeap(MiB(16));
 	memory_heap IndexHeap(MiB(16));
 
+	u32 ZeroInt = 0;
+	buffer ZeroBuffer(DirectWindow.Gfx, &ZeroInt, sizeof(u32));
+
 	buffer VertexBuffer = VertexHeap.PushBuffer(DirectWindow.Gfx, Geometries.Vertices.data(), Geometries.Vertices.size() * sizeof(vertex));
 	buffer IndexBuffer = IndexHeap.PushBuffer(DirectWindow.Gfx, Geometries.VertexIndices.data(), Geometries.VertexIndices.size() * sizeof(u32));
 	DirectWindow.Gfx->PushIndexedVertexData(&VertexBuffer, &IndexBuffer, Geometries.Offsets);
-
-	XMMatrixPerspectiveFovRH(Pi<r64>/3, 1240.0/720.0, 1, 100);
 
 	world_update WorldUpdate = {Identity(), PerspectiveInfFarZ(Pi<r64>/3, 1240, 720, 1)};
 	buffer WorldUpdateBuffer(DirectWindow.Gfx, (void*)&WorldUpdate, sizeof(world_update), 256);
 
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};
 	MeshCompCullingCommonData.FrustrumCullingEnabled = true;
-	GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, WorldUpdate.Proj, 1);
+	GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, WorldUpdate.Proj, 1, 100);
 	buffer MeshCommonCullingData(DirectWindow.Gfx, &MeshCompCullingCommonData, sizeof(mesh_comp_culling_common_input), 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
 	buffer GeometryOffsets(DirectWindow.Gfx, Geometries.Offsets.data(), Geometries.Offsets.size() * sizeof(mesh::offset));
@@ -133,8 +325,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 	MeshDrawCommandDataBuffer.Update(DirectWindow.Gfx, MeshDrawCommandData.data());
 
-	buffer IndirectDrawCommands(DirectWindow.Gfx, IndirectDrawCommandVector.data(), sizeof(indirect_draw_command) * DrawCount, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-	buffer IndirectDrawIndexedCommands(DirectWindow.Gfx, IndirectDrawIndexedCommandVector.data(), sizeof(indirect_draw_indexed_command) * DrawCount, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	buffer IndirectDrawCommands(DirectWindow.Gfx, IndirectDrawCommandVector.data(), sizeof(indirect_draw_command) * DrawCount + sizeof(u32), 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	buffer IndirectDrawIndexedCommands(DirectWindow.Gfx, IndirectDrawIndexedCommandVector.data(), sizeof(indirect_draw_indexed_command) * DrawCount + sizeof(u32), 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
 	// Graphics Resources
 	D3D12_CPU_DESCRIPTOR_HANDLE GfxDescriptorHeapHandle = DirectWindow.Gfx->GfxResourceHeap->GetCPUDescriptorHandleForHeapStart();
@@ -184,8 +376,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpUavDesc0.Buffer.FirstElement = 0;
 	CmpUavDesc0.Buffer.NumElements = DrawCount;
 	CmpUavDesc0.Buffer.StructureByteStride = sizeof(indirect_draw_command);
+	CmpUavDesc0.Buffer.CounterOffsetInBytes = DrawCount * sizeof(indirect_draw_command);
 	CmpUavDesc0.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawCommands.Handle.Get(), nullptr, &CmpUavDesc0, CmpDescriptorHeapHandle);
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawCommands.Handle.Get(), IndirectDrawCommands.Handle.Get(), &CmpUavDesc0, CmpDescriptorHeapHandle);
 	CmpDescriptorHeapHandle.ptr += DirectWindow.Gfx->ResourceHeapIncrement;
 
 	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc1 = {};
@@ -194,8 +387,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpUavDesc1.Buffer.FirstElement = 0;
 	CmpUavDesc1.Buffer.NumElements = DrawCount;
 	CmpUavDesc1.Buffer.StructureByteStride = sizeof(indirect_draw_indexed_command);
+	CmpUavDesc1.Buffer.CounterOffsetInBytes = DrawCount * sizeof(indirect_draw_indexed_command);
 	CmpUavDesc1.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawIndexedCommands.Handle.Get(), nullptr, &CmpUavDesc1, CmpDescriptorHeapHandle);
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawIndexedCommands.Handle.Get(), IndirectDrawIndexedCommands.Handle.Get(), &CmpUavDesc1, CmpDescriptorHeapHandle);
 	CmpDescriptorHeapHandle.ptr += DirectWindow.Gfx->ResourceHeapIncrement;
 
 	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc2 = {};
@@ -208,72 +402,39 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshCommonCullingData.Handle.Get(), nullptr, &CmpUavDesc2, CmpDescriptorHeapHandle);
 
 	// Graphics Resources
-	D3D12_ROOT_PARAMETER GfxRootParameter[2] = {};
-	GfxRootParameter[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	GfxRootParameter[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	GfxRootParameter[0].Descriptor = {0, 0};
-	GfxRootParameter[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	GfxRootParameter[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	GfxRootParameter[1].Descriptor = {1, 0};
-	CD3DX12_ROOT_SIGNATURE_DESC GfxRootSignatureDesc;
-	GfxRootSignatureDesc.Init(_countof(GfxRootParameter), GfxRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-
-	ComPtr<ID3DBlob> Signature;
-	ComPtr<ID3DBlob> Error;
-	ComPtr<ID3D12RootSignature> GfxRootSignature0;
-	D3D12SerializeRootSignature(&GfxRootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error);
-	DirectWindow.Gfx->Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&GfxRootSignature0));
+	shader_input GfxRootSignature;
+	GfxRootSignature.PushConstantBuffer(0, 0)->
+					 PushConstantBuffer(1, 0)->
+					 Build(DirectWindow.Gfx->Device.Get(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	// Compute Resources
-	D3D12_ROOT_PARAMETER CmpRootParameter[5] = {};
-	CmpRootParameter[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-	CmpRootParameter[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	CmpRootParameter[0].Descriptor = {0, 0};
-	CmpRootParameter[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-	CmpRootParameter[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	CmpRootParameter[1].Descriptor = {1, 0};
-	CmpRootParameter[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
-	CmpRootParameter[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	CmpRootParameter[2].Descriptor = {0, 0};
-	CmpRootParameter[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
-	CmpRootParameter[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	CmpRootParameter[3].Descriptor = {1, 0};
-	CmpRootParameter[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
-	CmpRootParameter[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	CmpRootParameter[4].Descriptor = {0, 1};
-	CD3DX12_ROOT_SIGNATURE_DESC CmpRootSignatureDesc;
-	CmpRootSignatureDesc.Init(_countof(CmpRootParameter), CmpRootParameter, 0, nullptr);
+	shader_input CmpRootSignature;
+#if 0
+	CmpRootSignature.PushShaderResource(0, 0)->
+					 PushShaderResource(1, 0)->
+					 PushUnorderedAccess(0, 0, D3D12_ROOT_DESCRIPTOR_FLAG_DATA_VOLATILE)->
+					 PushUnorderedAccess(1, 0, D3D12_ROOT_DESCRIPTOR_FLAG_DATA_VOLATILE)->
+					 PushUnorderedAccess(0, 1)->Build(DirectWindow.Gfx->Device.Get());
+#else
+	CmpRootSignature.PushShaderResourceTable(0, 2, 0);
+	CmpRootSignature.PushUnorderedAccessTable(0, 2, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
+	CmpRootSignature.PushUnorderedAccess(0, 1);
+	CmpRootSignature.Build(DirectWindow.Gfx->Device.Get());
+#endif
 
-	ComPtr<ID3D12RootSignature> CmpRootSignature;
-	D3D12SerializeRootSignature(&CmpRootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &Signature, &Error);
-	DirectWindow.Gfx->Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&CmpRootSignature));
+	indirect_command_signature DrawIndirectCommandSignature;
+	DrawIndirectCommandSignature.PushConstantBuffer(0)->
+								 PushConstantBuffer(1)->
+								 PushCommandDraw()->
+								 Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get(), sizeof(indirect_draw_command));
 
-	ComPtr<ID3D12CommandSignature> DrawIndirectCommandSignature;
-	D3D12_INDIRECT_ARGUMENT_DESC DrawArgumentDescs[3] = {};
-	DrawArgumentDescs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
-	DrawArgumentDescs[0].ConstantBufferView.RootParameterIndex = 0;
-	DrawArgumentDescs[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
-	DrawArgumentDescs[1].ConstantBufferView.RootParameterIndex = 1;
-	DrawArgumentDescs[2].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
-	D3D12_COMMAND_SIGNATURE_DESC CommandSignatureDesc = {};
-	CommandSignatureDesc.pArgumentDescs = DrawArgumentDescs;
-	CommandSignatureDesc.NumArgumentDescs = _countof(DrawArgumentDescs);
-	CommandSignatureDesc.ByteStride = sizeof(indirect_draw_command);
-	DirectWindow.Gfx->Device->CreateCommandSignature(&CommandSignatureDesc, GfxRootSignature0.Get(), IID_PPV_ARGS(&DrawIndirectCommandSignature));
+	indirect_command_signature DrawIndexedIndirectCommandSignature;
+	DrawIndexedIndirectCommandSignature.PushConstantBuffer(0)->
+										PushConstantBuffer(1)->
+										PushCommandDrawIndexed()->
+										Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get(), sizeof(indirect_draw_indexed_command));
 
-	ComPtr<ID3D12CommandSignature> DrawIndexedIndirectCommandSignature;
-	D3D12_INDIRECT_ARGUMENT_DESC DrawIndexedArgumentDescs[3] = {};
-	DrawIndexedArgumentDescs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
-	DrawIndexedArgumentDescs[0].ConstantBufferView.RootParameterIndex = 0;
-	DrawIndexedArgumentDescs[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
-	DrawIndexedArgumentDescs[1].ConstantBufferView.RootParameterIndex = 1;
-	DrawIndexedArgumentDescs[2].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
-	CommandSignatureDesc.pArgumentDescs = DrawIndexedArgumentDescs;
-	CommandSignatureDesc.NumArgumentDescs = _countof(DrawIndexedArgumentDescs);
-	CommandSignatureDesc.ByteStride = sizeof(indirect_draw_indexed_command);
-	DirectWindow.Gfx->Device->CreateCommandSignature(&CommandSignatureDesc, GfxRootSignature0.Get(), IID_PPV_ARGS(&DrawIndexedIndirectCommandSignature));
-
-	DirectWindow.Gfx->CreateGraphicsAndComputePipeline(GfxRootSignature0.Get(), CmpRootSignature.Get());
+	DirectWindow.Gfx->CreateGraphicsAndComputePipeline(GfxRootSignature.Handle.Get(), CmpRootSignature.Handle.Get());
 	double TimeLast = window::GetTimestamp();
 	double AvgCpuTime = 0.0;
 	while(DirectWindow.IsRunning())
@@ -283,15 +444,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 		if(!DirectWindow.IsGfxPaused)
 		{
-			DirectWindow.Gfx->BeginCompute(CmpRootSignature.Get(), GeometryOffsets, MeshDrawCommandDataBuffer, IndirectDrawCommands, IndirectDrawIndexedCommands, MeshCommonCullingData);
+			DirectWindow.Gfx->BeginCompute(CmpRootSignature.Handle.Get(), GeometryOffsets, MeshDrawCommandDataBuffer, IndirectDrawCommands, IndirectDrawIndexedCommands, MeshCommonCullingData, ZeroBuffer, DrawCount * sizeof(indirect_draw_command), DrawCount * sizeof(indirect_draw_indexed_command));
 			DirectWindow.Gfx->Dispatch(floor((DrawCount + 31) / 32), 1, 1);
 			DirectWindow.Gfx->EndCompute(IndirectDrawCommands, IndirectDrawIndexedCommands);
 
-			mesh_comp_culling_common_input CullingResult = {};
-			MeshCommonCullingData.ReadBack(DirectWindow.Gfx, &CullingResult);
-
-			DirectWindow.Gfx->BeginRender(GfxRootSignature0.Get(), IndirectDrawIndexedCommands, WorldUpdateBuffer);
-			DirectWindow.Gfx->DrawIndirect(DrawIndexedIndirectCommandSignature.Get(), VertexBuffer, IndexBuffer, CullingResult.DrawCount, IndirectDrawIndexedCommands);
+			DirectWindow.Gfx->BeginRender(GfxRootSignature.Handle.Get(), IndirectDrawIndexedCommands, WorldUpdateBuffer);
+			DirectWindow.Gfx->DrawIndirect(DrawIndexedIndirectCommandSignature.Handle.Get(), VertexBuffer, IndexBuffer, DrawCount, IndirectDrawIndexedCommands, DrawCount * sizeof(indirect_draw_indexed_command));
 			//DirectWindow.Gfx->DrawIndexed();
 			DirectWindow.Gfx->EndRender(IndirectDrawIndexedCommands);
 		}
@@ -299,7 +457,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		double TimeEnd = window::GetTimestamp();
 		double TimeElapsed = (TimeEnd - TimeLast);
 
-#if 0
+#if 1
 		if(TimeElapsed < TargetFrameRate)
 		{
 			while(TimeElapsed < TargetFrameRate)
