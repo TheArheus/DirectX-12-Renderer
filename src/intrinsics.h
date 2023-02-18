@@ -20,6 +20,9 @@
 #include <wrl.h>
 #include <windows.h>
 
+using namespace Microsoft::WRL;
+using namespace DirectX;
+
 // NOTE: unsigned 
 typedef uint8_t  u8;
 typedef uint16_t u16;
@@ -47,6 +50,10 @@ template<typename T> struct type_name_res;
 
 #include "math.h"
 #include "mesh.h"
+#include "directx_utilities.hpp"
+#include "resources.hpp"
+#include "indirect_command_signature.hpp"
+#include "shader_input_signature.hpp"
 #include "renderer_directx12.h"
 #include "win32_window.h"
 

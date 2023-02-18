@@ -1,4 +1,6 @@
 
+#pragma once
+
 template<typename T>
 constexpr T Pi = 3.1415926535897932384626433832795028841971693993751058209749445923078164062;
 
@@ -632,7 +634,7 @@ struct plane
 	u32  Pad1;
 };
 
-void GeneratePlanes(plane* Planes, mat4 Proj, float NearZ, float FarZ)
+void GeneratePlanes(plane* Planes, mat4 Proj, float NearZ, float FarZ = 0)
 {
 	FarZ = (FarZ < NearZ) ? NearZ : FarZ;
 	Planes[0].Pos = vec3(0);

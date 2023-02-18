@@ -35,6 +35,7 @@ struct mesh_culling_common_input
 	plane Planes[6];
 	uint DrawCount;
 	uint FrustrumCullingEnabled;
+	row_major float4x4 Proj;
 };
 
 struct aabb
@@ -87,10 +88,18 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 	}
 	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex;
 
+	float4x4 Proj = MeshCullingCommonInput[0].Proj;
+
 	float3 SphereCenter = MeshOffsets[MeshIndex].BoundingSphere.Center.xyz * MeshDrawCommandData[DrawIndex].Scale + MeshDrawCommandData[DrawIndex].Translate.xyz;
 	float SphereRadius = MeshOffsets[MeshIndex].BoundingSphere.Radius;
 
+	float3 BoxMin = MeshOffsets[MeshIndex].AABB.Min.xyz * MeshDrawCommandData[DrawIndex].Scale + MeshDrawCommandData[DrawIndex].Translate.xyz;
+	float3 BoxMax = MeshOffsets[MeshIndex].AABB.Max.xyz * MeshDrawCommandData[DrawIndex].Scale + MeshDrawCommandData[DrawIndex].Translate.xyz;
+	BoxMin = mul(Proj, float4(BoxMin, 0)).xyz;
+	BoxMax = mul(Proj, float4(BoxMax, 0)).xyz;
+
 	bool IsVisible = true;
+	// Frustum Culling
 #if 0
 	IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[0].N, SphereCenter) > -SphereRadius);
 	IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[1].N, SphereCenter) > -SphereRadius);
@@ -106,7 +115,6 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 	IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[4].N, SphereCenter - MeshCullingCommonInput[0].Planes[4].P) > 0);
 	IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[5].N, SphereCenter - MeshCullingCommonInput[0].Planes[5].P) > 0);
 #endif
-
 	IsVisible = MeshCullingCommonInput[0].FrustrumCullingEnabled ? IsVisible : true;
 
 	if(IsVisible)

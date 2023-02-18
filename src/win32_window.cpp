@@ -14,9 +14,9 @@ window::window(unsigned int _Width, unsigned int _Height, const char* _Name)
 	AdjustRect.right = AdjustRect.left + Width;
 	AdjustRect.bottom = AdjustRect.top + Height;
 
-	AdjustWindowRect(&AdjustRect, WS_OVERLAPPEDWINDOW, 0);
+	AdjustWindowRect(&AdjustRect, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), 0);
 
-	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
+	Handle = CreateWindow(WindowClass.Name, Name, WS_OVERLAPPEDWINDOW & (~WS_THICKFRAME), CW_USEDEFAULT, CW_USEDEFAULT, AdjustRect.right - AdjustRect.left, AdjustRect.bottom - AdjustRect.top, 0, 0, WindowClass.Inst, this);
 	ShowWindow(Handle, SW_SHOWNORMAL);
 
 	QueryPerformanceFrequency(&TimerFrequency);
@@ -51,6 +51,9 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 	{
 		switch(Message)
 		{
+#if 0
+			// TODO: Consider to do in the future
+			// correct window resizing
 			case WM_ENTERSIZEMOVE:
 			{
 				IsGfxPaused = true;
@@ -61,8 +64,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 				IsGfxPaused = false;
 				if (Gfx)
 				{
-					if (Width != Gfx->Width || Height != Gfx->Height)
-						Gfx->RecreateSwapchain(Width, Height);
+					Gfx->RecreateSwapchain(Width, Height);
 				}
 				return 0;
 			} break;
@@ -73,6 +75,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 
 				return 0;
 			} break;
+#endif
 			case WM_CLOSE:
 			{
 				PostQuitMessage(0);
@@ -108,7 +111,7 @@ void window::SetTitle(std::string& Title)
 
 void window::InitGraphics()
 {
-	Gfx = std::make_unique<d3d_app>(Handle, Width, Height);
+	Gfx = std::make_unique<renderer_backend>(Handle, Width, Height);
 }
 
 // Returns time in milliseconds

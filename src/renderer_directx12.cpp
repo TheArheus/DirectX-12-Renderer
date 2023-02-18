@@ -1,8 +1,8 @@
 
-d3d_app::
-d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), Height(ClientHeight)
+renderer_backend::
+renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 {
-	Viewport = { 0, 0, (r32)Width, (r32)Height, D3D12_MIN_DEPTH, D3D12_MAX_DEPTH };
+	Viewport = { 0, 0, (r32)ClientWidth, (r32)ClientHeight, D3D12_MIN_DEPTH, D3D12_MAX_DEPTH };
 	Rect = { 0, 0, (LONG)ClientWidth, (LONG)ClientHeight };
 
 #if defined(_DEBUG)
@@ -62,8 +62,8 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 		ComPtr<IDXGISwapChain1> _SwapChain;
 		DXGI_SWAP_CHAIN_DESC1 SwapChainDesc = {};
 		SwapChainDesc.Flags = (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-		SwapChainDesc.Width = Width;
-		SwapChainDesc.Height = Height;
+		SwapChainDesc.Width = ClientWidth;
+		SwapChainDesc.Height = ClientHeight;
 		SwapChainDesc.BufferCount = 2;
 		SwapChainDesc.Format = BackBufferFormat;
 		SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -76,7 +76,8 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 
 	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 
-	GfxCommandsBegin();
+	GfxCommandAlloc->Reset();
+	GfxCommandList->Reset(GfxCommandAlloc.Get(), nullptr);
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC RtvHeapDesc = {};
 		RtvHeapDesc.NumDescriptors = 2;
@@ -92,11 +93,11 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 		Device->CreateDescriptorHeap(&DsvHeapDesc, IID_PPV_ARGS(&DsvHeap));
 
 		D3D12_DESCRIPTOR_HEAP_DESC ResourceHeapDesc = {};
-		ResourceHeapDesc.NumDescriptors = 2;
+		ResourceHeapDesc.NumDescriptors = 64;
 		ResourceHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		ResourceHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&GfxResourceHeap));
-		ResourceHeapDesc.NumDescriptors = 5;
+		ResourceHeapDesc.NumDescriptors = 64;
 		ResourceHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		ResourceHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&CmpResourceHeap));
@@ -114,8 +115,8 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 
 		D3D12_RESOURCE_DESC DepthStencilDesc = {};
 		DepthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-		DepthStencilDesc.Width = Width;
-		DepthStencilDesc.Height = Height;
+		DepthStencilDesc.Width = ClientWidth;
+		DepthStencilDesc.Height = ClientHeight;
 		DepthStencilDesc.DepthOrArraySize = 1;
 		DepthStencilDesc.MipLevels = 1;
 		DepthStencilDesc.Format = DepthBufferFormat;
@@ -133,232 +134,104 @@ d3d_app(HWND Window, u32 ClientWidth, u32 ClientHeight) : Width(ClientWidth), He
 
 		Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
 
-		auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-		GfxCommandList->ResourceBarrier(1, &Barrier);
+		//auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+		//GfxCommandList->ResourceBarrier(1, &Barrier);
 	}
-	GfxCommandsEnd();
-	GfxFlush();
+	GfxCommandList->Close();
+	ID3D12CommandList* GfxCmdLists[] = { GfxCommandList.Get() };
+	GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
+	Flush(GfxCommandQueue.Get());
 };
 
-void d3d_app::
-CreateGraphicsAndComputePipeline(ID3D12RootSignature* GfxRootSignature, ID3D12RootSignature* CmpRootSignature)
+ID3D12PipelineState* renderer_backend::
+CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, const std::string& VertexShader, const std::string& PixelShader)
 {
+	ComPtr<ID3DBlob> VertShader;
+	ComPtr<ID3DBlob> FragShader;
+	D3DReadFileToBlob(std::wstring(VertexShader.begin(), VertexShader.end()).c_str(), &VertShader);
+	D3DReadFileToBlob(std::wstring(PixelShader.begin(), PixelShader.end()).c_str(), &FragShader);
+
+	D3D12_INPUT_ELEMENT_DESC InputDesc[] = 
 	{
-		{
-			ComPtr<ID3DBlob> VertShader;
-			ComPtr<ID3DBlob> FragShader;
-			ComPtr<ID3DBlob> CompShader;
-			D3DReadFileToBlob(L"..\\build\\mesh.vert.cso", &VertShader);
-			D3DReadFileToBlob(L"..\\build\\mesh.frag.cso", &FragShader);
-			D3DReadFileToBlob(L"..\\build\\indirect.comp.cso", &CompShader);
-
-			D3D12_INPUT_ELEMENT_DESC InputDesc[] = 
-			{
-				{"POSITION", 0, DXGI_FORMAT_R16G16B16A16_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
-				{"TEXTCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
-				{"NORMAL", 0, DXGI_FORMAT_R32_UINT, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
-			};
-
-			D3D12_RASTERIZER_DESC RasterDesc = {};
-			RasterDesc.FillMode = D3D12_FILL_MODE_SOLID;
-			RasterDesc.CullMode = D3D12_CULL_MODE_BACK;
-			RasterDesc.FrontCounterClockwise = true;
-			RasterDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-			RasterDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-			RasterDesc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-			RasterDesc.DepthClipEnable = true;
-			RasterDesc.MultisampleEnable = false;
-			RasterDesc.AntialiasedLineEnable = false;
-			RasterDesc.ForcedSampleCount = 0;
-			RasterDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-
-			D3D12_DEPTH_STENCIL_DESC DepthStencilDesc = {};
-			DepthStencilDesc.DepthEnable = true;
-			DepthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-			DepthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
-			DepthStencilDesc.StencilEnable = false;
-			DepthStencilDesc.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
-			DepthStencilDesc.StencilWriteMask = D3D12_DEFAULT_STENCIL_READ_MASK;
-			DepthStencilDesc.FrontFace = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_ALWAYS};
-			DepthStencilDesc.BackFace = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_ALWAYS};
-
-			D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
-			PipelineDesc.InputLayout = {InputDesc, _countof(InputDesc)};
-			PipelineDesc.pRootSignature = GfxRootSignature;
-			PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertShader.Get());
-			PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(FragShader.Get());
-			PipelineDesc.RasterizerState = RasterDesc;
-			PipelineDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-			PipelineDesc.DepthStencilState = DepthStencilDesc;
-			PipelineDesc.SampleMask = UINT_MAX;
-			PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-			PipelineDesc.NumRenderTargets = 1;
-			PipelineDesc.SampleDesc.Count = MsaaState ? 4 : 1;
-			PipelineDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
-			PipelineDesc.RTVFormats[0] = BackBufferFormat;
-			PipelineDesc.DSVFormat = DepthBufferFormat;
-			PipelineDesc.SampleDesc.Count = 1;
-			Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&GfxPipelineState));
-
-			D3D12_COMPUTE_PIPELINE_STATE_DESC CmpPipelineDesc = {};
-			CmpPipelineDesc.CS = CD3DX12_SHADER_BYTECODE(CompShader.Get());
-			CmpPipelineDesc.pRootSignature = CmpRootSignature;
-			Device->CreateComputePipelineState(&CmpPipelineDesc, IID_PPV_ARGS(&CmpPipelineState));
-		}
-	}
-}
-
-void d3d_app::BeginRender(ID3D12RootSignature* RootSignature, const buffer& Buffer, const buffer& Buffer1)
-{
-	GfxCommandsBegin(GfxPipelineState.Get());
-
-	GfxCommandList->SetGraphicsRootSignature(RootSignature);
-	GfxCommandList->SetPipelineState(GfxPipelineState.Get());
-
-	ID3D12DescriptorHeap* Heaps[] = {GfxResourceHeap.Get()};
-	GfxCommandList->SetDescriptorHeaps(1, Heaps);
-
-	CD3DX12_RESOURCE_BARRIER Barrier[] = 
-	{
-		CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Handle.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
-		CD3DX12_RESOURCE_BARRIER::Transition(Buffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT),
+		{"POSITION", 0, DXGI_FORMAT_R16G16B16A16_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
+		{"TEXTCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
+		{"NORMAL", 0, DXGI_FORMAT_R32_UINT, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
 	};
-	GfxCommandList->ResourceBarrier(2, Barrier);
 
-	GfxCommandList->RSSetViewports(1, &Viewport);
-	GfxCommandList->RSSetScissorRects(1, &Rect);
+	D3D12_RASTERIZER_DESC RasterDesc = {};
+	RasterDesc.FillMode = D3D12_FILL_MODE_SOLID;
+	RasterDesc.CullMode = D3D12_CULL_MODE_BACK;
+	RasterDesc.FrontCounterClockwise = true;
+	RasterDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+	RasterDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+	RasterDesc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+	RasterDesc.DepthClipEnable = true;
+	RasterDesc.MultisampleEnable = false;
+	RasterDesc.AntialiasedLineEnable = false;
+	RasterDesc.ForcedSampleCount = 0;
+	RasterDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
-	//GfxCommandList->SetGraphicsRootConstantBufferView(1, Buffer1.GpuPtr);
+	D3D12_DEPTH_STENCIL_DESC DepthStencilDesc = {};
+	DepthStencilDesc.DepthEnable = true;
+	DepthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	DepthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
+	DepthStencilDesc.StencilEnable = false;
+	DepthStencilDesc.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+	DepthStencilDesc.StencilWriteMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+	DepthStencilDesc.FrontFace = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_ALWAYS};
+	DepthStencilDesc.BackFace = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_COMPARISON_FUNC_ALWAYS};
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE RenderViewHandle(RtvHeap->GetCPUDescriptorHandleForHeapStart(), BackBufferIndex, RtvSize);
-	D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView = DsvHeap->GetCPUDescriptorHandleForHeapStart();
-	GfxCommandList->OMSetRenderTargets(1, &RenderViewHandle, true, &DepthStencilView);
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
+	PipelineDesc.InputLayout = {InputDesc, _countof(InputDesc)};
+	PipelineDesc.pRootSignature = GfxRootSignature;
+	PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertShader.Get());
+	PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(FragShader.Get());
+	PipelineDesc.RasterizerState = RasterDesc;
+	PipelineDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	PipelineDesc.DepthStencilState = DepthStencilDesc;
+	PipelineDesc.SampleMask = UINT_MAX;
+	PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	PipelineDesc.NumRenderTargets = 1;
+	PipelineDesc.SampleDesc.Count = MsaaState ? 4 : 1;
+	PipelineDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
+	PipelineDesc.RTVFormats[0] = BackBufferFormat;
+	PipelineDesc.DSVFormat = DepthBufferFormat;
+	PipelineDesc.SampleDesc.Count = 1;
+	ID3D12PipelineState* Result;
+	Device->CreateGraphicsPipelineState(&PipelineDesc, IID_PPV_ARGS(&Result));
 
-	float ClearColor[] = { 0.2f, 0.2f, 0.2f, 1.0f };
-	GfxCommandList->ClearRenderTargetView(RenderViewHandle, ClearColor, 0, nullptr);
-	GfxCommandList->ClearDepthStencilView(DsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
-	GfxCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-};
-
-void d3d_app::
-Draw()
-{
-	for(const vertex_buffer_view& View : VertexViews)
-	{
-		GfxCommandList->IASetVertexBuffers(0, 1, &View.Handle);
-		GfxCommandList->DrawInstanced(View.VertexCount, 1, View.VertexBegin, 0);
-	}
+	return Result;
 }
 
-void d3d_app::
-DrawIndexed()
+ID3D12PipelineState* renderer_backend::
+CreateComputePipeline(ID3D12RootSignature* CmpRootSignature, const std::string& ComputeShader)
 {
-	for(const std::pair<vertex_buffer_view, index_buffer_view>& View : IndexedVertexViews)
-	{
-		GfxCommandList->IASetVertexBuffers(0, 1, &View.first.Handle);
-		GfxCommandList->IASetIndexBuffer(&View.second.Handle);
-		GfxCommandList->DrawIndexedInstanced(View.second.IndexCount, 1, View.second.IndexBegin, 0, 0);
-	}
+	ComPtr<ID3DBlob> CompShader;
+	D3DReadFileToBlob(std::wstring(ComputeShader.begin(), ComputeShader.end()).c_str(), &CompShader);
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC PipelineDesc = {};
+	PipelineDesc.CS = CD3DX12_SHADER_BYTECODE(CompShader.Get());
+	PipelineDesc.pRootSignature = CmpRootSignature;
+	ID3D12PipelineState* Result;
+	Device->CreateComputePipelineState(&PipelineDesc, IID_PPV_ARGS(&Result));
+
+	return Result;
 }
 
-void d3d_app::
-DrawIndirect(ID3D12CommandSignature* CommandSignature, const buffer& VertexBuffer, const buffer& IndexBuffer, u32 DrawCount, const buffer& IndirectCommands, u32 CounterOffset)
+void renderer_backend::
+Flush(ID3D12CommandQueue* CommandQueue)
 {
-	D3D12_VERTEX_BUFFER_VIEW VertexBufferView = {VertexBuffer.GpuPtr, static_cast<u32>(VertexBuffer.Size), sizeof(vertex)};
-	D3D12_INDEX_BUFFER_VIEW IndexBufferView = {IndexBuffer.GpuPtr, static_cast<u32>(IndexBuffer.Size), DXGI_FORMAT_R32_UINT};
-	GfxCommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
-	GfxCommandList->IASetIndexBuffer(&IndexBufferView);
-	GfxCommandList->ExecuteIndirect(CommandSignature, DrawCount, IndirectCommands.Handle.Get(), 0, IndirectCommands.Handle.Get(), CounterOffset);
-}
-
-void d3d_app::
-EndRender(const buffer& Buffer)
-{
-	CD3DX12_RESOURCE_BARRIER Barrier[] = 
-	{
-		CD3DX12_RESOURCE_BARRIER::Transition(BackBuffers[BackBufferIndex].Handle.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT),
-		CD3DX12_RESOURCE_BARRIER::Transition(Buffer.Handle.Get(), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, D3D12_RESOURCE_STATE_COMMON),
-	};
-	GfxCommandList->ResourceBarrier(2, Barrier);
-
-	GfxCommandsEnd();
-
-	SwapChain->Present(0, 0);
-
-	GfxFlush();
-	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
-}
-
-void d3d_app::
-BeginCompute(ID3D12RootSignature* RootSignature, const buffer& Buffer0, const buffer& Buffer1, const buffer& Buffer2, const buffer& Buffer3, const buffer& Buffer4, const buffer& ZeroBuffer, u32 CounterOffset0, u32 CounterOffset1)
-{
-	D3D12_GPU_DESCRIPTOR_HANDLE CmpResourceHeapHandle = CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
-
-	CmpCommandsBegin(CmpPipelineState.Get());
-
-	CmpCommandList->SetComputeRootSignature(RootSignature);
-	CmpCommandList->SetPipelineState(CmpPipelineState.Get());
-
-	ID3D12DescriptorHeap* Heaps[] = { CmpResourceHeap.Get() };
-	CmpCommandList->SetDescriptorHeaps(1, Heaps);
-
-	CmpCommandList->SetComputeRootDescriptorTable(0, CmpResourceHeapHandle);
-	CmpResourceHeapHandle.ptr += 2 * ResourceHeapIncrement;
-	CmpCommandList->SetComputeRootDescriptorTable(1, CmpResourceHeapHandle);
-	CmpCommandList->SetComputeRootUnorderedAccessView(2, Buffer4.GpuPtr);
-
-	CmpCommandList->CopyBufferRegion(Buffer2.Handle.Get(), CounterOffset0, ZeroBuffer.Handle.Get(), 0, sizeof(u32));
-	CmpCommandList->CopyBufferRegion(Buffer3.Handle.Get(), CounterOffset1, ZeroBuffer.Handle.Get(), 0, sizeof(u32));
-
-	D3D12_RESOURCE_BARRIER barrier[] = 
-	{
-		CD3DX12_RESOURCE_BARRIER::Transition(Buffer2.Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-		CD3DX12_RESOURCE_BARRIER::Transition(Buffer3.Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-	};
-	CmpCommandList->ResourceBarrier(2, barrier);
-}
-
-void d3d_app::
-Dispatch(u32 X, u32 Y, u32 Z)
-{
-	CmpCommandList->Dispatch(X, Y, Z);
-}
-
-void d3d_app::
-EndCompute(const buffer& Buffer0, const buffer& Buffer1)
-{
-	D3D12_RESOURCE_BARRIER barrier[] = 
-	{
-		CD3DX12_RESOURCE_BARRIER::Transition(Buffer0.Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON),
-		CD3DX12_RESOURCE_BARRIER::Transition(Buffer1.Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON),
-	};
-	CmpCommandList->ResourceBarrier(2, barrier);
-
-	CmpCommandsEnd();
-	CmpFlush();
-}
-
-void d3d_app::
-GfxFlush()
-{
-	FenceSignal(GfxCommandQueue.Get());
+	FenceSignal(CommandQueue);
 	FenceWait();
 }
 
-void d3d_app::
-CmpFlush()
-{
-	FenceSignal(CmpCommandQueue.Get());
-	FenceWait();
-}
-
-void d3d_app::
+void renderer_backend::
 FenceSignal(ID3D12CommandQueue* CommandQueue)
 {
 	CommandQueue->Signal(Fence.Get(), ++CurrentFence);
 }
 
-void d3d_app::
+void renderer_backend::
 FenceWait()
 {
 	if(Fence->GetCompletedValue() < CurrentFence)
@@ -370,47 +243,17 @@ FenceWait()
 	}
 }
 
-void d3d_app::
-GfxCommandsBegin(ID3D12PipelineState* _PipelineState)
-{
-	GfxCommandAlloc->Reset();
-	GfxCommandList->Reset(GfxCommandAlloc.Get(), _PipelineState);
-}
-
-void d3d_app::
-GfxCommandsEnd()
-{
-	GfxCommandList->Close();
-	ID3D12CommandList* CmdLists[] = { GfxCommandList.Get() };
-	GfxCommandQueue->ExecuteCommandLists(_countof(CmdLists), CmdLists);
-}
-
-void d3d_app::
-CmpCommandsBegin(ID3D12PipelineState* _PipelineState)
-{
-	CmpCommandAlloc->Reset();
-	CmpCommandList->Reset(CmpCommandAlloc.Get(), _PipelineState);
-}
-
-void d3d_app::
-CmpCommandsEnd()
-{
-	CmpCommandList->Close();
-	ID3D12CommandList* CmdLists[] = { CmpCommandList.Get() };
-	CmpCommandQueue->ExecuteCommandLists(_countof(CmdLists), CmdLists);
-}
-
-void d3d_app::
+void renderer_backend::
 RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 {
-	GfxFlush();
-	Width = NewWidth;
-	Height = NewHeight;
+	Flush(GfxCommandQueue.Get());
 
-	Viewport = { 0, 0, (r32)NewWidth, (r32)NewHeight, D3D12_MIN_DEPTH, D3D12_MAX_DEPTH };
+	Viewport.Width  = (r32)NewWidth;
+	Viewport.Height = (r32)NewHeight;
 	Rect = { 0, 0, (LONG)NewWidth, (LONG)NewHeight };
 
-	GfxCommandsBegin();
+	GfxCommandAlloc->Reset();
+	GfxCommandList->Reset(GfxCommandAlloc.Get(), nullptr);
 
 	for (u32 Idx = 0;
 		Idx < 2;
@@ -435,8 +278,8 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 
 	D3D12_RESOURCE_DESC DepthStencilDesc = {};
 	DepthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	DepthStencilDesc.Width = Width;
-	DepthStencilDesc.Height = Height;
+	DepthStencilDesc.Width = NewWidth;
+	DepthStencilDesc.Height = NewHeight;
 	DepthStencilDesc.DepthOrArraySize = 1;
 	DepthStencilDesc.MipLevels = 1;
 	DepthStencilDesc.Format = DepthBufferFormat;
@@ -454,15 +297,18 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 
 	Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
 
-	auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-	GfxCommandList->ResourceBarrier(1, &Barrier);
+	//auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	//GfxCommandList->ResourceBarrier(1, &Barrier);
 
-	GfxCommandsEnd();
+	GfxCommandList->Close();
+	ID3D12CommandList* GfxCmdLists[] = { GfxCommandList.Get() };
+	GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
 
-	GfxFlush();
+	Flush(GfxCommandQueue.Get());
 }
 
-void d3d_app::
+#if 0
+void renderer_backend::
 PushVertexData(buffer* VertexBuffer, std::vector<mesh::offset>& Offsets)
 {
 	vertex_buffer_view VertexBufferView = {};
@@ -475,7 +321,7 @@ PushVertexData(buffer* VertexBuffer, std::vector<mesh::offset>& Offsets)
 	}
 }
 
-void d3d_app::
+void renderer_backend::
 PushIndexedVertexData(buffer* VertexBuffer, buffer* IndexBuffer, std::vector<mesh::offset>& Offsets)
 {
 	vertex_buffer_view VertexBufferView = {};
@@ -493,4 +339,26 @@ PushIndexedVertexData(buffer* VertexBuffer, buffer* IndexBuffer, std::vector<mes
 		IndexedVertexViews.push_back(std::make_pair(VertexBufferView, IndexBufferView));
 	}
 }
+
+void renderer_backend::
+Draw()
+{
+	for(const vertex_buffer_view& View : VertexViews)
+	{
+		GfxCommandList->IASetVertexBuffers(0, 1, &View.Handle);
+		GfxCommandList->DrawInstanced(View.VertexCount, 1, View.VertexBegin, 0);
+	}
+}
+
+void renderer_backend::
+DrawIndexed()
+{
+	for(const std::pair<vertex_buffer_view, index_buffer_view>& View : IndexedVertexViews)
+	{
+		GfxCommandList->IASetVertexBuffers(0, 1, &View.first.Handle);
+		GfxCommandList->IASetIndexBuffer(&View.second.Handle);
+		GfxCommandList->DrawIndexedInstanced(View.second.IndexCount, 1, View.second.IndexBegin, 0, 0);
+	}
+}
+#endif
 

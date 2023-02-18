@@ -49,7 +49,7 @@ public:
 	void SetTitle(std::string& Title);
 	bool IsRunning(){return WindowClass.IsRunning;}
 
-	std::unique_ptr<d3d_app> Gfx;
+	std::unique_ptr<renderer_backend> Gfx;
 
 	HWND Handle;
 	const char* Name;

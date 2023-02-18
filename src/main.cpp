@@ -5,8 +5,6 @@
 
 #include <random>
 
-// NOTE: Create Command Signature
-
 const u32 DrawCount = 1024*50;
 
 struct indirect_draw_command
@@ -43,233 +41,9 @@ struct mesh_comp_culling_common_input
 	plane CullingPlanes[6];
 	u32 DrawCount;
 	u32 FrustrumCullingEnabled;
+	mat4 Proj;
 };
 
-// NOTE: This could be unified with descriptor heap allocator
-class shader_input
-{
-	std::vector<D3D12_ROOT_PARAMETER1> Parameters;
-
-	// TODO: Shader Visibility
-public:
-	shader_input* PushShaderResource(u32 Register, u32 Space, D3D12_ROOT_DESCRIPTOR_FLAGS Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC)
-	{
-		D3D12_ROOT_PARAMETER1 Parameter = {};
-		Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		Parameter.Descriptor = {Register, Space, Flags};
-		Parameters.push_back(Parameter);
-
-		return this;
-	}
-
-	shader_input* PushConstantBuffer(u32 Register, u32 Space, D3D12_ROOT_DESCRIPTOR_FLAGS Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC)
-	{
-		D3D12_ROOT_PARAMETER1 Parameter = {};
-		Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		Parameter.Descriptor = {Register, Space, Flags};
-		Parameters.push_back(Parameter);
-
-		return this;
-	}
-
-	shader_input* PushUnorderedAccess(u32 Register, u32 Space, D3D12_ROOT_DESCRIPTOR_FLAGS Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC)
-	{
-		D3D12_ROOT_PARAMETER1 Parameter = {};
-		Parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
-		Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		Parameter.Descriptor = {Register, Space, Flags};
-		Parameters.push_back(Parameter);
-
-		return this;
-	}
-
-	shader_input* PushShaderResourceTable(u32 Start, u32 Count, u32 Space, D3D12_DESCRIPTOR_RANGE_FLAGS Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC)
-	{
-		// NOTE: don't like this solution. 
-		// Maybe there could be something better?
-		D3D12_DESCRIPTOR_RANGE1* ParameterRange = new D3D12_DESCRIPTOR_RANGE1;
-		ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-		ParameterRange->BaseShaderRegister = Start;
-		ParameterRange->NumDescriptors = Count;
-		ParameterRange->RegisterSpace = Space;
-		ParameterRange->Flags = Flags;
-		ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-		D3D12_ROOT_PARAMETER1 Parameter = {};
-		Parameter.DescriptorTable = {1, ParameterRange};
-
-		Parameters.push_back(Parameter);
-
-		return this;
-	}
-
-	shader_input* PushConstantBufferTable(u32 Start, u32 Count, u32 Space, D3D12_DESCRIPTOR_RANGE_FLAGS Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC)
-	{
-		D3D12_DESCRIPTOR_RANGE1* ParameterRange = new D3D12_DESCRIPTOR_RANGE1;
-		ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-		ParameterRange->BaseShaderRegister = Start;
-		ParameterRange->NumDescriptors = Count;
-		ParameterRange->RegisterSpace = Space;
-		ParameterRange->Flags = Flags;
-		ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-		D3D12_ROOT_PARAMETER1 Parameter = {};
-		Parameter.DescriptorTable = {1, ParameterRange};
-
-		Parameters.push_back(Parameter);
-
-		return this;
-	}
-
-	shader_input* PushUnorderedAccessTable(u32 Start, u32 Count, u32 Space, D3D12_DESCRIPTOR_RANGE_FLAGS Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC)
-	{
-		D3D12_DESCRIPTOR_RANGE1* ParameterRange = new D3D12_DESCRIPTOR_RANGE1;
-		ParameterRange->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-		ParameterRange->BaseShaderRegister = Start;
-		ParameterRange->NumDescriptors = Count;
-		ParameterRange->RegisterSpace = Space;
-		ParameterRange->Flags = Flags;
-		ParameterRange->OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-		D3D12_ROOT_PARAMETER1 Parameter = {};
-		Parameter.DescriptorTable = {1, ParameterRange};
-
-		Parameters.push_back(Parameter);
-
-		return this;
-	}
-
-	void Build(ID3D12Device1* Device, D3D12_ROOT_SIGNATURE_FLAGS Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE)
-	{
-		CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC RootSignatureDesc;
-		RootSignatureDesc.Init_1_1(Parameters.size(), Parameters.data(), 0, nullptr, Flags);
-
-		ComPtr<ID3DBlob> Signature;
-		ComPtr<ID3DBlob> Error;
-		HRESULT Res = D3DX12SerializeVersionedRootSignature(&RootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, &Signature, &Error);
-		Device->CreateRootSignature(0, Signature->GetBufferPointer(), Signature->GetBufferSize(), IID_PPV_ARGS(&Handle));
-	}
-
-	ComPtr<ID3D12RootSignature> Handle;
-};
-
-class indirect_command_signature
-{
-	std::vector<D3D12_INDIRECT_ARGUMENT_DESC> Parameters;
-
-public:
-
-	indirect_command_signature* PushCommandDraw()
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
-		Parameters.push_back(Parameter);
-		return this;
-	}
-
-	indirect_command_signature* PushCommandDrawIndexed()
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
-		Parameters.push_back(Parameter);
-		return this;
-	}
-
-	indirect_command_signature* PushCommandDispatch()
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
-		Parameters.push_back(Parameter);
-		return this;
-	}	
-
-	indirect_command_signature* PushCommandDispatchMesh()
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH;
-		Parameters.push_back(Parameter);
-		return this;
-	}	
-
-	indirect_command_signature* PushCommandDispatchRays()
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
-		Parameters.push_back(Parameter);
-		return this;
-	}	
-
-	indirect_command_signature* PushShaderResource(u32 RootParameterIndex)
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_SHADER_RESOURCE_VIEW;
-		Parameter.ShaderResourceView.RootParameterIndex = RootParameterIndex;
-		Parameters.push_back(Parameter);
-		return this;
-	}
-
-	indirect_command_signature* PushConstantBuffer(u32 RootParameterIndex)
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT_BUFFER_VIEW;
-		Parameter.ConstantBufferView.RootParameterIndex = RootParameterIndex;
-		Parameters.push_back(Parameter);
-		return this;
-	}
-
-	indirect_command_signature* PushConstant(u32 RootParameterIndex)
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
-		Parameter.Constant.RootParameterIndex = RootParameterIndex;
-		Parameters.push_back(Parameter);
-		return this;
-	}
-
-	indirect_command_signature* PushUnorderedAccess(u32 RootParameterIndex)
-	{
-		D3D12_INDIRECT_ARGUMENT_DESC Parameter = {};
-		Parameter.Type = D3D12_INDIRECT_ARGUMENT_TYPE_UNORDERED_ACCESS_VIEW;
-		Parameter.UnorderedAccessView.RootParameterIndex = RootParameterIndex;
-		Parameters.push_back(Parameter);
-		return this;
-	}
-
-	void Build(ID3D12Device1* Device, ID3D12RootSignature* RootSignature, u32 IndirectCommandSize)
-	{
-		D3D12_COMMAND_SIGNATURE_DESC CommandSignatureDesc = {};
-		CommandSignatureDesc.pArgumentDescs = Parameters.data();
-		CommandSignatureDesc.NumArgumentDescs = Parameters.size();
-		CommandSignatureDesc.ByteStride = IndirectCommandSize;
-		Device->CreateCommandSignature(&CommandSignatureDesc, RootSignature, IID_PPV_ARGS(&Handle));
-	}
-
-	ComPtr<ID3D12CommandSignature> Handle;
-};
-
-class descriptor_heap
-{
-	u32 Size;
-	u32 Total;
-
-public:
-	descriptor_heap(ID3D12Device1* Device, u32 NumberOfDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE Type, D3D12_DESCRIPTOR_HEAP_FLAGS Flags)
-	{
-		D3D12_DESCRIPTOR_HEAP_DESC HeapDesc = {};
-		HeapDesc.NumDescriptors = NumberOfDescriptors;
-		HeapDesc.Type = Type;
-		HeapDesc.Flags = Flags;
-		Device->CreateDescriptorHeap(&HeapDesc, IID_PPV_ARGS(&Handle));
-	}
-
-	u32 AllocInc;
-	D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle;
-	D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle;
-
-	ComPtr<ID3D12DescriptorHeap> Handle;
-};
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {	
@@ -279,7 +53,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	srand(512);
 	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
 
-	mesh Geometries({"..\\assets\\kitten.obj", "..\\assets\\stanford-bunny.obj"}, generate_aabb | generate_sphere);
+	mesh Geometries({"..\\assets\\kitten.obj"}, generate_aabb | generate_sphere);
 	std::vector<mesh_draw_command_input> MeshDrawCommandData(DrawCount);
 	std::vector<indirect_draw_command> IndirectDrawCommandVector(DrawCount);
 	std::vector<indirect_draw_indexed_command> IndirectDrawIndexedCommandVector(DrawCount);
@@ -292,14 +66,15 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 	buffer VertexBuffer = VertexHeap.PushBuffer(DirectWindow.Gfx, Geometries.Vertices.data(), Geometries.Vertices.size() * sizeof(vertex));
 	buffer IndexBuffer = IndexHeap.PushBuffer(DirectWindow.Gfx, Geometries.VertexIndices.data(), Geometries.VertexIndices.size() * sizeof(u32));
-	DirectWindow.Gfx->PushIndexedVertexData(&VertexBuffer, &IndexBuffer, Geometries.Offsets);
+	//DirectWindow.Gfx->PushIndexedVertexData(&VertexBuffer, &IndexBuffer, Geometries.Offsets);
 
 	world_update WorldUpdate = {Identity(), PerspectiveInfFarZ(Pi<r64>/3, 1240, 720, 1)};
 	buffer WorldUpdateBuffer(DirectWindow.Gfx, (void*)&WorldUpdate, sizeof(world_update), 256);
 
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};
 	MeshCompCullingCommonData.FrustrumCullingEnabled = true;
-	GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, WorldUpdate.Proj, 1, 100);
+	MeshCompCullingCommonData.Proj = WorldUpdate.Proj;
+	GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, WorldUpdate.Proj, 1);
 	buffer MeshCommonCullingData(DirectWindow.Gfx, &MeshCompCullingCommonData, sizeof(mesh_comp_culling_common_input), 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
 	buffer GeometryOffsets(DirectWindow.Gfx, Geometries.Offsets.data(), Geometries.Offsets.size() * sizeof(mesh::offset));
@@ -324,6 +99,21 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	}
 
 	MeshDrawCommandDataBuffer.Update(DirectWindow.Gfx, MeshDrawCommandData.data());
+
+	u32 DepthMipLevel = 1 + floorf(logf(1240));
+	u32 HiWidth  = 1240;
+	u32 HiHeight = 720;
+	std::vector<texture> DepthTextures(DepthMipLevel);
+	std::vector<D3D12_SUBRESOURCE_DATA> DepthSubresources(DepthMipLevel);
+	for(u32 DepthTextureIdx = 0;
+		DepthTextureIdx < DepthMipLevel;
+		++DepthTextureIdx)
+	{
+		HiWidth = HiWidth > 0 ? HiWidth >> 1 : 1;
+		HiHeight = HiHeight > 0 ? HiHeight >> 1 : 1;
+		texture DepthTexture(DirectWindow.Gfx, HiWidth, HiHeight, 1, DXGI_FORMAT_D32_FLOAT, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+		DepthTextures[DepthTextureIdx] = DepthTexture;
+	}
 
 	buffer IndirectDrawCommands(DirectWindow.Gfx, IndirectDrawCommandVector.data(), sizeof(indirect_draw_command) * DrawCount + sizeof(u32), 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 	buffer IndirectDrawIndexedCommands(DirectWindow.Gfx, IndirectDrawIndexedCommandVector.data(), sizeof(indirect_draw_indexed_command) * DrawCount + sizeof(u32), 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
@@ -401,40 +191,75 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpUavDesc2.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshCommonCullingData.Handle.Get(), nullptr, &CmpUavDesc2, CmpDescriptorHeapHandle);
 
-	// Graphics Resources
+	auto SamplerDescriptorHeapHandle = DirectWindow.Gfx->CmpResourceHeap->GetCPUDescriptorHandleForHeapStart();
+	SamplerDescriptorHeapHandle.ptr += 16 * DirectWindow.Gfx->ResourceHeapIncrement;
+	D3D12_SHADER_RESOURCE_VIEW_DESC DepthTextureSRVDesc = {};
+	DepthTextureSRVDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	DepthTextureSRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	DepthTextureSRVDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	DepthTextureSRVDesc.Texture2D.MipLevels = 1;
+	DepthTextureSRVDesc.Texture2D.PlaneSlice = 0;
+	DepthTextureSRVDesc.Texture2D.MostDetailedMip = 0;
+	DepthTextureSRVDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+	DirectWindow.Gfx->Device->CreateShaderResourceView(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), &DepthTextureSRVDesc, SamplerDescriptorHeapHandle);
+	SamplerDescriptorHeapHandle.ptr += DirectWindow.Gfx->ResourceHeapIncrement;
+
+	for(u32 DepthTextureIdx = 0;
+		DepthTextureIdx < DepthMipLevel;
+		++DepthTextureIdx)
+	{
+		DirectWindow.Gfx->Device->CreateShaderResourceView(DepthTextures[DepthTextureIdx].Handle.Get(), &DepthTextureSRVDesc, SamplerDescriptorHeapHandle);
+		SamplerDescriptorHeapHandle.ptr += DirectWindow.Gfx->ResourceHeapIncrement;
+	}
+
+	D3D12_UNORDERED_ACCESS_VIEW_DESC DepthTextureUAVDesc = {};
+	DepthTextureUAVDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	DepthTextureUAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+	DepthTextureUAVDesc.Texture2D.MipSlice = 0;
+	DepthTextureUAVDesc.Texture2D.PlaneSlice = 0;
+	for(u32 DepthTextureIdx = 0;
+		DepthTextureIdx < DepthMipLevel;
+		++DepthTextureIdx)
+	{
+		DirectWindow.Gfx->Device->CreateUnorderedAccessView(DepthTextures[DepthTextureIdx].Handle.Get(), nullptr, &DepthTextureUAVDesc, SamplerDescriptorHeapHandle);
+		SamplerDescriptorHeapHandle.ptr += DirectWindow.Gfx->ResourceHeapIncrement;
+	}
+
 	shader_input GfxRootSignature;
 	GfxRootSignature.PushConstantBuffer(0, 0)->
 					 PushConstantBuffer(1, 0)->
 					 Build(DirectWindow.Gfx->Device.Get(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
-	// Compute Resources
 	shader_input CmpRootSignature;
-#if 0
-	CmpRootSignature.PushShaderResource(0, 0)->
-					 PushShaderResource(1, 0)->
-					 PushUnorderedAccess(0, 0, D3D12_ROOT_DESCRIPTOR_FLAG_DATA_VOLATILE)->
-					 PushUnorderedAccess(1, 0, D3D12_ROOT_DESCRIPTOR_FLAG_DATA_VOLATILE)->
-					 PushUnorderedAccess(0, 1)->Build(DirectWindow.Gfx->Device.Get());
-#else
-	CmpRootSignature.PushShaderResourceTable(0, 2, 0);
-	CmpRootSignature.PushUnorderedAccessTable(0, 2, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE);
-	CmpRootSignature.PushUnorderedAccess(0, 1);
-	CmpRootSignature.Build(DirectWindow.Gfx->Device.Get());
-#endif
+	CmpRootSignature.PushShaderResourceTable(0, 2, 0)->
+					 PushUnorderedAccessTable(0, 2, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE)->
+					 PushUnorderedAccess(0, 1)->
+					 Build(DirectWindow.Gfx->Device.Get());
+
+	shader_input CmpReduceRootSignature;
+	CmpReduceRootSignature.PushShaderResourceTable(0, 1, 0)->
+						   PushUnorderedAccessTable(0, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE)->
+						   PushSampler(0, 0)->
+						   Build(DirectWindow.Gfx->Device.Get());
 
 	indirect_command_signature DrawIndirectCommandSignature;
 	DrawIndirectCommandSignature.PushConstantBuffer(0)->
 								 PushConstantBuffer(1)->
 								 PushCommandDraw()->
-								 Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get(), sizeof(indirect_draw_command));
+								 Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get());
 
 	indirect_command_signature DrawIndexedIndirectCommandSignature;
 	DrawIndexedIndirectCommandSignature.PushConstantBuffer(0)->
 										PushConstantBuffer(1)->
 										PushCommandDrawIndexed()->
-										Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get(), sizeof(indirect_draw_indexed_command));
+										Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get());
 
-	DirectWindow.Gfx->CreateGraphicsAndComputePipeline(GfxRootSignature.Handle.Get(), CmpRootSignature.Handle.Get());
+	ComPtr<ID3D12PipelineState> GfxPipelineState = DirectWindow.Gfx->CreateGraphicsPipeline(GfxRootSignature.Handle.Get(), "..\\build\\mesh.vert.cso", "..\\build\\mesh.frag.cso");
+	ComPtr<ID3D12PipelineState> CmpPipelineState = DirectWindow.Gfx->CreateComputePipeline(CmpRootSignature.Handle.Get(), "..\\build\\indirect.comp.cso");
+	ComPtr<ID3D12PipelineState> CmpReducePipelineState = DirectWindow.Gfx->CreateComputePipeline(CmpReduceRootSignature.Handle.Get(), "..\\build\\depth_reduce.comp.cso");
+
+	ID3D12GraphicsCommandList* CmpCommandList = DirectWindow.Gfx->CmpCommandList.Get();
+	ID3D12GraphicsCommandList* GfxCommandList = DirectWindow.Gfx->GfxCommandList.Get();
 	double TimeLast = window::GetTimestamp();
 	double AvgCpuTime = 0.0;
 	while(DirectWindow.IsRunning())
@@ -444,20 +269,176 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 		if(!DirectWindow.IsGfxPaused)
 		{
-			DirectWindow.Gfx->BeginCompute(CmpRootSignature.Handle.Get(), GeometryOffsets, MeshDrawCommandDataBuffer, IndirectDrawCommands, IndirectDrawIndexedCommands, MeshCommonCullingData, ZeroBuffer, DrawCount * sizeof(indirect_draw_command), DrawCount * sizeof(indirect_draw_indexed_command));
-			DirectWindow.Gfx->Dispatch(floor((DrawCount + 31) / 32), 1, 1);
-			DirectWindow.Gfx->EndCompute(IndirectDrawCommands, IndirectDrawIndexedCommands);
+			{
+				auto DepthBufferHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
+				DepthBufferHandle.ptr += 16 * DirectWindow.Gfx->ResourceHeapIncrement;
+				auto InputDepthTextureHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
+				InputDepthTextureHandle.ptr += 17 * DirectWindow.Gfx->ResourceHeapIncrement;
+				auto OutputDepthTextureHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
+				OutputDepthTextureHandle.ptr += 25 * DirectWindow.Gfx->ResourceHeapIncrement;
 
-			DirectWindow.Gfx->BeginRender(GfxRootSignature.Handle.Get(), IndirectDrawIndexedCommands, WorldUpdateBuffer);
-			DirectWindow.Gfx->DrawIndirect(DrawIndexedIndirectCommandSignature.Handle.Get(), VertexBuffer, IndexBuffer, DrawCount, IndirectDrawIndexedCommands, DrawCount * sizeof(indirect_draw_indexed_command));
-			//DirectWindow.Gfx->DrawIndexed();
-			DirectWindow.Gfx->EndRender(IndirectDrawIndexedCommands);
+				DirectWindow.Gfx->CmpCommandAlloc->Reset();
+				CmpCommandList->Reset(DirectWindow.Gfx->CmpCommandAlloc.Get(), CmpReducePipelineState.Get());
+
+				CmpCommandList->SetComputeRootSignature(CmpReduceRootSignature.Handle.Get());
+				CmpCommandList->SetPipelineState(CmpReducePipelineState.Get());
+
+				ID3D12DescriptorHeap* Heaps[] = { DirectWindow.Gfx->CmpResourceHeap.Get() };
+				CmpCommandList->SetDescriptorHeaps(1, Heaps);
+
+				D3D12_RESOURCE_BARRIER DepthBufferBarrier[9] = {};
+				DepthBufferBarrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				DepthBufferBarrier[1] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[0].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				DepthBufferBarrier[2] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[1].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				DepthBufferBarrier[3] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[2].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				DepthBufferBarrier[4] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[3].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				DepthBufferBarrier[5] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[4].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				DepthBufferBarrier[6] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[5].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				DepthBufferBarrier[7] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[6].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				DepthBufferBarrier[8] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[7].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				CmpCommandList->ResourceBarrier(9, DepthBufferBarrier);
+				
+				D3D12_GPU_DESCRIPTOR_HANDLE In  = {};
+				D3D12_GPU_DESCRIPTOR_HANDLE Out = {};
+				HiWidth  = 1240;
+				HiHeight = 720;
+				for(u32 DepthTextureIdx = 0;
+					DepthTextureIdx < DepthMipLevel;
+					++DepthTextureIdx)
+				{
+					HiWidth  = max(1, HiWidth >> 1);
+					HiHeight = max(1, HiHeight >> 1);
+
+					In.ptr  = DepthTextureIdx == 0 ? DepthBufferHandle.ptr : InputDepthTextureHandle.ptr + (DepthTextureIdx - 1) * DirectWindow.Gfx->ResourceHeapIncrement;
+					Out.ptr = DepthTextureIdx == 0 ? OutputDepthTextureHandle.ptr : OutputDepthTextureHandle.ptr + DepthTextureIdx * DirectWindow.Gfx->ResourceHeapIncrement;
+
+					CD3DX12_RESOURCE_BARRIER Barrier[2];
+					if(DepthTextureIdx != 0)
+					{
+						Barrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthTextureIdx - 1].Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+						Barrier[1] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthTextureIdx].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+						CmpCommandList->ResourceBarrier(2, Barrier);
+					}
+
+					CmpCommandList->SetComputeRootDescriptorTable(0, In);
+					CmpCommandList->SetComputeRootDescriptorTable(1, Out);
+					CmpCommandList->Dispatch(floor((HiWidth + 31) / 32), floor((HiHeight + 31) / 32), 1);
+				}
+
+				DepthBufferBarrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthMipLevel - 1].Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				CmpCommandList->ResourceBarrier(1, DepthBufferBarrier);
+
+				CmpCommandList->Close();
+				ID3D12CommandList* CmpCmdLists[] = { CmpCommandList };
+				DirectWindow.Gfx->CmpCommandQueue->ExecuteCommandLists(_countof(CmpCmdLists), CmpCmdLists);
+				DirectWindow.Gfx->Flush(DirectWindow.Gfx->CmpCommandQueue.Get());
+			}
+
+			{
+				D3D12_GPU_DESCRIPTOR_HANDLE CmpResourceHeapHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
+
+				DirectWindow.Gfx->CmpCommandAlloc->Reset();
+				CmpCommandList->Reset(DirectWindow.Gfx->CmpCommandAlloc.Get(), CmpPipelineState.Get());
+
+				CmpCommandList->SetComputeRootSignature(CmpRootSignature.Handle.Get());
+				CmpCommandList->SetPipelineState(CmpPipelineState.Get());
+
+				ID3D12DescriptorHeap* Heaps[] = { DirectWindow.Gfx->CmpResourceHeap.Get() };
+				CmpCommandList->SetDescriptorHeaps(1, Heaps);
+
+				CmpCommandList->SetComputeRootDescriptorTable(0, CmpResourceHeapHandle);
+				CmpResourceHeapHandle.ptr += 2 * DirectWindow.Gfx->ResourceHeapIncrement;
+				CmpCommandList->SetComputeRootDescriptorTable(1, CmpResourceHeapHandle);
+				CmpCommandList->SetComputeRootUnorderedAccessView(2, MeshCommonCullingData.GpuPtr);
+
+				CmpCommandList->CopyBufferRegion(IndirectDrawCommands.Handle.Get(), DrawCount * sizeof(indirect_draw_command), ZeroBuffer.Handle.Get(), 0, sizeof(u32));
+				CmpCommandList->CopyBufferRegion(IndirectDrawIndexedCommands.Handle.Get(), DrawCount * sizeof(indirect_draw_indexed_command), ZeroBuffer.Handle.Get(), 0, sizeof(u32));
+
+				D3D12_RESOURCE_BARRIER Barrier[] = 
+				{
+					CD3DX12_RESOURCE_BARRIER::Transition(IndirectDrawCommands.Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+					CD3DX12_RESOURCE_BARRIER::Transition(IndirectDrawIndexedCommands.Handle.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+				};
+				CmpCommandList->ResourceBarrier(2, Barrier);
+
+				CmpCommandList->Dispatch(floor((DrawCount + 31) / 32), 1, 1);
+
+				Barrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(IndirectDrawCommands.Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON),
+				Barrier[1] = CD3DX12_RESOURCE_BARRIER::Transition(IndirectDrawIndexedCommands.Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON),
+				CmpCommandList->ResourceBarrier(2, Barrier);
+
+				CmpCommandList->Close();
+				ID3D12CommandList* CmpCmdLists[] = { CmpCommandList };
+				DirectWindow.Gfx->CmpCommandQueue->ExecuteCommandLists(_countof(CmpCmdLists), CmpCmdLists);
+				DirectWindow.Gfx->Flush(DirectWindow.Gfx->CmpCommandQueue.Get());
+			}
+
+			{
+				DirectWindow.Gfx->GfxCommandAlloc->Reset();
+				GfxCommandList->Reset(DirectWindow.Gfx->GfxCommandAlloc.Get(), GfxPipelineState.Get());
+
+				GfxCommandList->SetGraphicsRootSignature(GfxRootSignature.Handle.Get());
+				GfxCommandList->SetPipelineState(GfxPipelineState.Get());
+
+				ID3D12DescriptorHeap* Heaps[] = {DirectWindow.Gfx->GfxResourceHeap.Get()};
+				GfxCommandList->SetDescriptorHeaps(1, Heaps);
+
+				CD3DX12_RESOURCE_BARRIER Barrier[11] = 
+				{
+					CD3DX12_RESOURCE_BARRIER::Transition(DirectWindow.Gfx->BackBuffers[DirectWindow.Gfx->BackBufferIndex].Handle.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET),
+					CD3DX12_RESOURCE_BARRIER::Transition(IndirectDrawIndexedCommands.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT),
+					CD3DX12_RESOURCE_BARRIER::Transition(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE),
+				};
+				GfxCommandList->ResourceBarrier(3, Barrier);
+
+				GfxCommandList->RSSetViewports(1, &DirectWindow.Gfx->Viewport);
+				GfxCommandList->RSSetScissorRects(1, &DirectWindow.Gfx->Rect);
+
+				CD3DX12_CPU_DESCRIPTOR_HANDLE RenderViewHandle(DirectWindow.Gfx->RtvHeap->GetCPUDescriptorHandleForHeapStart(), DirectWindow.Gfx->BackBufferIndex, DirectWindow.Gfx->RtvSize);
+				D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilView = DirectWindow.Gfx->DsvHeap->GetCPUDescriptorHandleForHeapStart();
+				GfxCommandList->OMSetRenderTargets(1, &RenderViewHandle, true, &DepthStencilView);
+
+				float ClearColor[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+				GfxCommandList->ClearRenderTargetView(RenderViewHandle, ClearColor, 0, nullptr);
+				GfxCommandList->ClearDepthStencilView(DirectWindow.Gfx->DsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
+
+				D3D12_VERTEX_BUFFER_VIEW VertexBufferView = {VertexBuffer.GpuPtr, static_cast<u32>(VertexBuffer.Size), sizeof(vertex)};
+				D3D12_INDEX_BUFFER_VIEW IndexBufferView = {IndexBuffer.GpuPtr, static_cast<u32>(IndexBuffer.Size), DXGI_FORMAT_R32_UINT};
+				GfxCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+				GfxCommandList->IASetVertexBuffers(0, 1, &VertexBufferView);
+				GfxCommandList->IASetIndexBuffer(&IndexBufferView);
+
+				GfxCommandList->ExecuteIndirect(DrawIndexedIndirectCommandSignature.Handle.Get(), DrawCount, IndirectDrawIndexedCommands.Handle.Get(), 0, IndirectDrawIndexedCommands.Handle.Get(), DrawCount * sizeof(indirect_draw_indexed_command));
+
+				Barrier[0]  = CD3DX12_RESOURCE_BARRIER::Transition(DirectWindow.Gfx->BackBuffers[DirectWindow.Gfx->BackBufferIndex].Handle.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT),
+				Barrier[1]  = CD3DX12_RESOURCE_BARRIER::Transition(IndirectDrawIndexedCommands.Handle.Get(), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, D3D12_RESOURCE_STATE_COMMON),
+				Barrier[2]  = CD3DX12_RESOURCE_BARRIER::Transition(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_COMMON);
+				Barrier[3]  = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[0].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+				Barrier[4]  = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[1].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+				Barrier[5]  = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[2].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+				Barrier[6]  = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[3].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+				Barrier[7]  = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[4].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+				Barrier[8]  = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[5].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+				Barrier[9]  = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[6].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+				Barrier[10] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[7].Handle.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+				GfxCommandList->ResourceBarrier(11, Barrier);
+
+				GfxCommandList->Close();
+			}
+
+			ID3D12CommandList* GfxCmdLists[] = { GfxCommandList };
+			DirectWindow.Gfx->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
+			DirectWindow.Gfx->Flush(DirectWindow.Gfx->GfxCommandQueue.Get());
+
+			DirectWindow.Gfx->SwapChain->Present(0, 0);
+
+			DirectWindow.Gfx->BackBufferIndex = DirectWindow.Gfx->SwapChain->GetCurrentBackBufferIndex();
 		}
 
 		double TimeEnd = window::GetTimestamp();
 		double TimeElapsed = (TimeEnd - TimeLast);
 
-#if 1
+#if 0
 		if(TimeElapsed < TargetFrameRate)
 		{
 			while(TimeElapsed < TargetFrameRate)
