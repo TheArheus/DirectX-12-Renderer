@@ -17,7 +17,8 @@ rem )
 
 dxc.exe "..\shaders\mesh.vert.hlsl" -O2 -E main -T vs_6_6 -enable-16bit-types -Fo "..\build\mesh.vert.cso"
 dxc.exe "..\shaders\mesh.frag.hlsl" -O2 -E main -T ps_6_6 -Fo "..\build\mesh.frag.cso"
-dxc.exe "..\shaders\indirect.comp.hlsl" -O2 -E main -T cs_6_6 -Fo "..\build\indirect.comp.cso"
+dxc.exe "..\shaders\indirect_cull_frust.comp.hlsl" -O2 -E main -T cs_6_6 -Fo "..\build\indirect_cull_frust.comp.cso"
+dxc.exe "..\shaders\indirect_cull_occl.comp.hlsl" -O2 -E main -T cs_6_6 -Fo "..\build\indirect_cull_occl.comp.cso"
 dxc.exe "..\shaders\depth_reduce.comp.hlsl" -O2 -E main -T cs_6_6 -Fo "..\build\depth_reduce.comp.cso"
 if not exist ..\build\ mkdir ..\build\
 pushd ..\build\

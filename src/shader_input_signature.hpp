@@ -106,16 +106,12 @@ public:
 	shader_input* PushSampler(u32 Register, u32 Space, D3D12_DESCRIPTOR_RANGE_FLAGS Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC)
 	{
 		D3D12_STATIC_SAMPLER_DESC Parameter = {};
-		Parameter.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+		Parameter.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 		Parameter.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		Parameter.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 		Parameter.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-		Parameter.MipLODBias = 0;
-		Parameter.MaxAnisotropy = 1;
-		//Parameter.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-		Parameter.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
-		Parameter.MinLOD = 0;
-		Parameter.MaxLOD = 0;
+		Parameter.MinLOD = 0.0;
+		Parameter.MaxLOD = 16.0;
 		Parameter.ShaderRegister = Register;
 		Parameter.RegisterSpace = Space;
 		Parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
