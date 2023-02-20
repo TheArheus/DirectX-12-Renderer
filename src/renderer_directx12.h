@@ -69,7 +69,7 @@ public:
 	//void PushVertexData(buffer* VertexBuffer, std::vector<mesh::offset>& Offsets);
 	//void PushIndexedVertexData(buffer* VertexBuffer, buffer* IndexBuffer, std::vector<mesh::offset>& Offsets);
 
-	ID3D12PipelineState* CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, const std::string& VertexShader, const std::string& PixelShader);
+	ID3D12PipelineState* CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, std::initializer_list<const std::string> ShaderList);
 	ID3D12PipelineState* CreateComputePipeline(ID3D12RootSignature* RootSignature, const std::string& ComputeShader);
 
 	void FenceSignal(ID3D12CommandQueue* CommandQueue);

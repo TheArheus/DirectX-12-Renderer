@@ -28,7 +28,7 @@ struct mesh_draw_command_input
 	uint64_t Buffer1;
 	uint64_t Buffer2;
 	u32  MeshIndex;
-	bool IsCulled;
+	bool IsVisible;
 };
 
 struct world_update
@@ -294,7 +294,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 										PushCommandDrawIndexed()->
 										Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get());
 
-	ComPtr<ID3D12PipelineState> GfxPipelineState = DirectWindow.Gfx->CreateGraphicsPipeline(GfxRootSignature.Handle.Get(), "..\\build\\mesh.vert.cso", "..\\build\\mesh.frag.cso");
+	ComPtr<ID3D12PipelineState> GfxPipelineState = DirectWindow.Gfx->CreateGraphicsPipeline(GfxRootSignature.Handle.Get(), {"..\\build\\mesh.vert.cso", "..\\build\\mesh.frag.cso"});
 	ComPtr<ID3D12PipelineState> CmpFrustPipelineState = DirectWindow.Gfx->CreateComputePipeline(CmpIndirectFrustRootSignature.Handle.Get(), "..\\build\\indirect_cull_frust.comp.cso");
 	ComPtr<ID3D12PipelineState> CmpOcclPipelineState = DirectWindow.Gfx->CreateComputePipeline(CmpIndirectOcclRootSignature.Handle.Get(), "..\\build\\indirect_cull_occl.comp.cso");
 	ComPtr<ID3D12PipelineState> CmpReducePipelineState = DirectWindow.Gfx->CreateComputePipeline(CmpReduceRootSignature.Handle.Get(), "..\\build\\depth_reduce.comp.cso");
@@ -310,70 +310,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 		if(!DirectWindow.IsGfxPaused)
 		{
-			{
-				auto DepthBufferHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
-				DepthBufferHandle.ptr += 16 * DirectWindow.Gfx->ResourceHeapIncrement;
-				auto InputDepthTextureHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
-				InputDepthTextureHandle.ptr += 17 * DirectWindow.Gfx->ResourceHeapIncrement;
-				auto OutputDepthTextureHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
-				OutputDepthTextureHandle.ptr += (17 + DepthMipLevel) * DirectWindow.Gfx->ResourceHeapIncrement;
-
-				DirectWindow.Gfx->CmpCommandAlloc->Reset();
-				CmpCommandList->Reset(DirectWindow.Gfx->CmpCommandAlloc.Get(), CmpReducePipelineState.Get());
-
-				CmpCommandList->SetComputeRootSignature(CmpReduceRootSignature.Handle.Get());
-				CmpCommandList->SetPipelineState(CmpReducePipelineState.Get());
-
-				ID3D12DescriptorHeap* Heaps[] = { DirectWindow.Gfx->CmpResourceHeap.Get() };
-				CmpCommandList->SetDescriptorHeaps(1, Heaps);
-
-				std::vector<D3D12_RESOURCE_BARRIER> DepthBufferBarrier;
-				DepthBufferBarrier.push_back(CD3DX12_RESOURCE_BARRIER::Transition(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-				for(u32 DepthIdx = 0;
-					DepthIdx < DepthMipLevel;
-					++DepthIdx)
-				{
-					DepthBufferBarrier.push_back(CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthIdx].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-				}
-				CmpCommandList->ResourceBarrier(DepthBufferBarrier.size(), DepthBufferBarrier.data());
-				
-				D3D12_GPU_DESCRIPTOR_HANDLE In  = {};
-				D3D12_GPU_DESCRIPTOR_HANDLE Out = {};
-				u32 NewHiWidth  = HiWidth;
-				u32 NewHiHeight = HiHeight;
-				for(u32 DepthTextureIdx = 0;
-					DepthTextureIdx < DepthMipLevel;
-					++DepthTextureIdx)
-				{
-					In.ptr  = DepthTextureIdx == 0 ? DepthBufferHandle.ptr : InputDepthTextureHandle.ptr + (DepthTextureIdx - 1) * DirectWindow.Gfx->ResourceHeapIncrement;
-					Out.ptr = DepthTextureIdx == 0 ? OutputDepthTextureHandle.ptr : OutputDepthTextureHandle.ptr + DepthTextureIdx * DirectWindow.Gfx->ResourceHeapIncrement;
-
-					if(DepthTextureIdx != 0)
-					{
-						DepthBufferBarrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthTextureIdx - 1].Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-						CmpCommandList->ResourceBarrier(1, DepthBufferBarrier.data());
-					}
-
-					NewHiWidth  = max(1, HiWidth  >> (DepthTextureIdx));
-					NewHiHeight = max(1, HiHeight >> (DepthTextureIdx));
-
-					CmpCommandList->SetComputeRootDescriptorTable(0, In);
-					//DepthReduceInput.MipLevel = DepthTextureIdx;
-					//DepthReduceInputBuffer.Update(DirectWindow.Gfx, &DepthReduceInput);
-					//CmpCommandList->SetComputeRootShaderResourceView(1, DepthReduceInputBuffer.GpuPtr);
-					CmpCommandList->SetComputeRootDescriptorTable(1, Out);
-					CmpCommandList->Dispatch(u32((NewHiWidth + 31) / 32), u32((NewHiHeight + 31) / 32), 1);
-				}
-
-				DepthBufferBarrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthMipLevel - 1].Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-				CmpCommandList->ResourceBarrier(1, DepthBufferBarrier.data());
-
-				CmpCommandList->Close();
-				ID3D12CommandList* CmpCmdLists[] = { CmpCommandList };
-				DirectWindow.Gfx->CmpCommandQueue->ExecuteCommandLists(_countof(CmpCmdLists), CmpCmdLists);
-				DirectWindow.Gfx->Flush(DirectWindow.Gfx->CmpCommandQueue.Get());
-			}
-
 			{
 				D3D12_GPU_DESCRIPTOR_HANDLE CmpResourceHeapHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
 
@@ -459,6 +395,70 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				ID3D12CommandList* GfxCmdLists[] = { GfxCommandList };
 				DirectWindow.Gfx->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
 				DirectWindow.Gfx->Flush(DirectWindow.Gfx->GfxCommandQueue.Get());
+			}
+
+			{
+				auto DepthBufferHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
+				DepthBufferHandle.ptr += 16 * DirectWindow.Gfx->ResourceHeapIncrement;
+				auto InputDepthTextureHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
+				InputDepthTextureHandle.ptr += 17 * DirectWindow.Gfx->ResourceHeapIncrement;
+				auto OutputDepthTextureHandle = DirectWindow.Gfx->CmpResourceHeap->GetGPUDescriptorHandleForHeapStart();
+				OutputDepthTextureHandle.ptr += (17 + DepthMipLevel) * DirectWindow.Gfx->ResourceHeapIncrement;
+
+				DirectWindow.Gfx->CmpCommandAlloc->Reset();
+				CmpCommandList->Reset(DirectWindow.Gfx->CmpCommandAlloc.Get(), CmpReducePipelineState.Get());
+
+				CmpCommandList->SetComputeRootSignature(CmpReduceRootSignature.Handle.Get());
+				CmpCommandList->SetPipelineState(CmpReducePipelineState.Get());
+
+				ID3D12DescriptorHeap* Heaps[] = { DirectWindow.Gfx->CmpResourceHeap.Get() };
+				CmpCommandList->SetDescriptorHeaps(1, Heaps);
+
+				std::vector<D3D12_RESOURCE_BARRIER> DepthBufferBarrier;
+				DepthBufferBarrier.push_back(CD3DX12_RESOURCE_BARRIER::Transition(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+				for(u32 DepthIdx = 0;
+					DepthIdx < DepthMipLevel;
+					++DepthIdx)
+				{
+					DepthBufferBarrier.push_back(CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthIdx].Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+				}
+				CmpCommandList->ResourceBarrier(DepthBufferBarrier.size(), DepthBufferBarrier.data());
+				
+				D3D12_GPU_DESCRIPTOR_HANDLE In  = {};
+				D3D12_GPU_DESCRIPTOR_HANDLE Out = {};
+				u32 NewHiWidth  = HiWidth;
+				u32 NewHiHeight = HiHeight;
+				for(u32 DepthTextureIdx = 0;
+					DepthTextureIdx < DepthMipLevel;
+					++DepthTextureIdx)
+				{
+					In.ptr  = DepthTextureIdx == 0 ? DepthBufferHandle.ptr : InputDepthTextureHandle.ptr + (DepthTextureIdx - 1) * DirectWindow.Gfx->ResourceHeapIncrement;
+					Out.ptr = DepthTextureIdx == 0 ? OutputDepthTextureHandle.ptr : OutputDepthTextureHandle.ptr + DepthTextureIdx * DirectWindow.Gfx->ResourceHeapIncrement;
+
+					if(DepthTextureIdx != 0)
+					{
+						DepthBufferBarrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthTextureIdx - 1].Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+						CmpCommandList->ResourceBarrier(1, DepthBufferBarrier.data());
+					}
+
+					NewHiWidth  = max(1, HiWidth  >> (DepthTextureIdx));
+					NewHiHeight = max(1, HiHeight >> (DepthTextureIdx));
+
+					CmpCommandList->SetComputeRootDescriptorTable(0, In);
+					//DepthReduceInput.MipLevel = DepthTextureIdx;
+					//DepthReduceInputBuffer.Update(DirectWindow.Gfx, &DepthReduceInput);
+					//CmpCommandList->SetComputeRootShaderResourceView(1, DepthReduceInputBuffer.GpuPtr);
+					CmpCommandList->SetComputeRootDescriptorTable(1, Out);
+					CmpCommandList->Dispatch(u32((NewHiWidth + 31) / 32), u32((NewHiHeight + 31) / 32), 1);
+				}
+
+				DepthBufferBarrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(DepthTextures[DepthMipLevel - 1].Handle.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				CmpCommandList->ResourceBarrier(1, DepthBufferBarrier.data());
+
+				CmpCommandList->Close();
+				ID3D12CommandList* CmpCmdLists[] = { CmpCommandList };
+				DirectWindow.Gfx->CmpCommandQueue->ExecuteCommandLists(_countof(CmpCmdLists), CmpCmdLists);
+				DirectWindow.Gfx->Flush(DirectWindow.Gfx->CmpCommandQueue.Get());
 			}
 
 			{

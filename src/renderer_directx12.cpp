@@ -144,13 +144,8 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 };
 
 ID3D12PipelineState* renderer_backend::
-CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, const std::string& VertexShader, const std::string& PixelShader)
+CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, std::initializer_list<const std::string> ShaderList)
 {
-	ComPtr<ID3DBlob> VertShader;
-	ComPtr<ID3DBlob> FragShader;
-	D3DReadFileToBlob(std::wstring(VertexShader.begin(), VertexShader.end()).c_str(), &VertShader);
-	D3DReadFileToBlob(std::wstring(PixelShader.begin(), PixelShader.end()).c_str(), &FragShader);
-
 	D3D12_INPUT_ELEMENT_DESC InputDesc[] = 
 	{
 		{"POSITION", 0, DXGI_FORMAT_R16G16B16A16_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA},
@@ -174,7 +169,7 @@ CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, const std::string&
 	D3D12_DEPTH_STENCIL_DESC DepthStencilDesc = {};
 	DepthStencilDesc.DepthEnable = true;
 	DepthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-	DepthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
+	DepthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
 	DepthStencilDesc.StencilEnable = false;
 	DepthStencilDesc.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
 	DepthStencilDesc.StencilWriteMask = D3D12_DEFAULT_STENCIL_READ_MASK;
@@ -184,8 +179,40 @@ CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, const std::string&
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineDesc = {};
 	PipelineDesc.InputLayout = {InputDesc, _countof(InputDesc)};
 	PipelineDesc.pRootSignature = GfxRootSignature;
-	PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(VertShader.Get());
-	PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(FragShader.Get());
+
+	std::vector<ComPtr<ID3DBlob>> ShadersBlob;
+	for(const std::string Shader : ShaderList)
+	{
+		ID3DBlob* ShaderBlob;
+		D3DReadFileToBlob(std::wstring(Shader.begin(), Shader.end()).c_str(), &ShaderBlob);
+
+		if(Shader.find(".vert.") != std::string::npos)
+		{
+			PipelineDesc.VS = CD3DX12_SHADER_BYTECODE(ShaderBlob);
+			ShadersBlob.push_back(ComPtr<ID3DBlob>(ShaderBlob));
+		}
+		if(Shader.find(".doma.") != std::string::npos)
+		{
+			PipelineDesc.DS = CD3DX12_SHADER_BYTECODE(ShaderBlob);
+			ShadersBlob.push_back(ComPtr<ID3DBlob>(ShaderBlob));
+		}
+		if(Shader.find(".hull.") != std::string::npos)
+		{
+			PipelineDesc.HS = CD3DX12_SHADER_BYTECODE(ShaderBlob);
+			ShadersBlob.push_back(ComPtr<ID3DBlob>(ShaderBlob));
+		}
+		if (Shader.find(".geom.") != std::string::npos)
+		{
+			PipelineDesc.GS = CD3DX12_SHADER_BYTECODE(ShaderBlob);
+			ShadersBlob.push_back(ComPtr<ID3DBlob>(ShaderBlob));
+		}
+		if(Shader.find(".frag.") != std::string::npos)
+		{
+			PipelineDesc.PS = CD3DX12_SHADER_BYTECODE(ShaderBlob);
+			ShadersBlob.push_back(ComPtr<ID3DBlob>(ShaderBlob));
+		}
+	}
+
 	PipelineDesc.RasterizerState = RasterDesc;
 	PipelineDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	PipelineDesc.DepthStencilState = DepthStencilDesc;

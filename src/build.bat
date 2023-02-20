@@ -16,10 +16,13 @@ rem 	set CppFiles=!CppFiles! "%%f"
 rem )
 
 dxc.exe "..\shaders\mesh.vert.hlsl" -O2 -E main -T vs_6_6 -enable-16bit-types -Fo "..\build\mesh.vert.cso"
+dxc.exe "..\shaders\mesh_back_cull.geom.hlsl" -O2 -E main -T gs_6_6 -enable-16bit-types -Fo "..\build\mesh_back_cull.geom.cso"
 dxc.exe "..\shaders\mesh.frag.hlsl" -O2 -E main -T ps_6_6 -Fo "..\build\mesh.frag.cso"
+
 dxc.exe "..\shaders\indirect_cull_frust.comp.hlsl" -O2 -E main -T cs_6_6 -Fo "..\build\indirect_cull_frust.comp.cso"
 dxc.exe "..\shaders\indirect_cull_occl.comp.hlsl" -O2 -E main -T cs_6_6 -Fo "..\build\indirect_cull_occl.comp.cso"
 dxc.exe "..\shaders\depth_reduce.comp.hlsl" -O2 -E main -T cs_6_6 -Fo "..\build\depth_reduce.comp.cso"
+
 if not exist ..\build\ mkdir ..\build\
 pushd ..\build\
 cl %CommonCompFlags% user32.lib kernel32.lib d3d12.lib dxgi.lib dxguid.lib d3dcompiler.lib dxcompiler.lib %CppFiles% %OneFile% /link %CommonLinkFlags%

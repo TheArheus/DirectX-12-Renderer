@@ -115,16 +115,16 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 	}
 
 	// Occlusion Culling
-	bool IsNotOcclCulled;
+	bool IsNotOcclCulled = true;
 	float3 BoxDims = (ProjBoxMax - ProjBoxMin);
 	if(IsVisible && MeshCullingCommonInput[0].OcclusionCullingEnabled)
 	{
-		uint Lod = floor(log2(max(BoxDims.x * MeshCullingCommonInput[0].HiZWidth, BoxDims.y * MeshCullingCommonInput[0].HiZHeight)));
+		uint Lod = ceil(log2(max(BoxDims.x * MeshCullingCommonInput[0].HiZWidth, BoxDims.y * MeshCullingCommonInput[0].HiZHeight)));
 
 		float4 Texel = HiZDepthTextures[Lod].Gather(DepthSampler, BoxDims.xy * 0.5);
-		float MaxZ = max(max(Texel.x, Texel.y), max(Texel.z, Texel.w));
 
-		IsNotOcclCulled = (ProjBoxMax.z >= MaxZ);
+		float ObjDepth = ProjBoxMax.z;
+		IsNotOcclCulled = (ObjDepth > (max(max(Texel.x, Texel.y), max(Texel.z, Texel.w)) - 0.01));
 	}
 
 	MeshDrawCommandData[DrawIndex].IsVisible = IsNotOcclCulled && IsVisible;

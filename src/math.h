@@ -587,13 +587,13 @@ mat4 Perspective(float Fov, float Width, float Height, float NearZ, float FarZ)
 {
 	float a = Height / Width;
 	float f = cosf(0.5f * Fov) / sinf(0.5f * Fov);
-	float l = FarZ / (NearZ - FarZ);
+	float l = FarZ / (FarZ - NearZ);
 	mat4 Result = 
 	{
 		f*a, 0,  0, 0,
 		 0,  f,  0, 0,
-		 0,  0,  l, l * NearZ,
-		 0,  0, -1, 0,
+		 0,  0,  l, -l * NearZ,
+		 0,  0,  1, 0,
 	};
 
 	return Result;
