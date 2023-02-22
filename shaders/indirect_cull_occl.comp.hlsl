@@ -124,7 +124,7 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 		float4 Texel = HiZDepthTextures[Lod].Gather(DepthSampler, BoxDims.xy * 0.5);
 
 		float ObjDepth = ProjBoxMax.z;
-		IsNotOcclCulled = (ObjDepth > (max(max(Texel.x, Texel.y), max(Texel.z, Texel.w)) - 0.01));
+		IsNotOcclCulled = (ObjDepth > (min(min(Texel.x, Texel.y), min(Texel.z, Texel.w)) - 0.01));
 	}
 
 	MeshDrawCommandData[DrawIndex].IsVisible = IsNotOcclCulled && IsVisible;

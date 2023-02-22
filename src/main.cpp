@@ -31,6 +31,15 @@ struct mesh_draw_command_input
 	bool IsVisible;
 };
 
+struct mesh_draw_command
+{
+	vec4  Translate;
+	float Scale;
+	float Pad0;
+	float Pad1;
+	float Pad2;
+};
+
 struct world_update
 {
 	mat4 View;
@@ -79,6 +88,8 @@ u32 PreviousPowerOfTwo(u32 x)
 
 int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 {	
+	u32 ScreenWidth;
+	u32 ScreenHeight;
 	window DirectWindow(1240, 720, "3D Renderer");
 	DirectWindow.InitGraphics();
 
@@ -105,6 +116,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};
 	MeshCompCullingCommonData.FrustrumCullingEnabled = true;
 	MeshCompCullingCommonData.OcclusionCullingEnabled = true;
+	MeshCompCullingCommonData.DrawCount = DrawCount;
 	MeshCompCullingCommonData.Proj = WorldUpdate.Proj;
 	GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, WorldUpdate.Proj, 1);
 
@@ -113,6 +125,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 	buffer GeometryOffsets(DirectWindow.Gfx, Geometries.Offsets.data(), Geometries.Offsets.size() * sizeof(mesh::offset));
 	buffer MeshDrawCommandDataBuffer(DirectWindow.Gfx, sizeof(mesh_draw_command_input) * DrawCount, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	buffer MeshDrawCommandBuffer(DirectWindow.Gfx, sizeof(mesh_draw_command) * DrawCount, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
 	u32 SceneRadius = 10;
 	for(u32 DataIdx = 0;
@@ -121,7 +134,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	{
 		mesh_draw_command_input& CommandData = MeshDrawCommandData[DataIdx];
 		CommandData.MeshIndex = rand() % Geometries.Offsets.size();
-		CommandData.Buffer1 = MeshDrawCommandDataBuffer.GpuPtr + sizeof(mesh_draw_command_input) * DataIdx;
+		CommandData.Buffer1 = MeshDrawCommandBuffer.GpuPtr; //MeshDrawCommandDataBuffer.GpuPtr + sizeof(mesh_draw_command_input) * DataIdx;
 		CommandData.Buffer2 = WorldUpdateBuffer.GpuPtr;
 
 		CommandData.Scale = 1.0f / 2;
@@ -217,10 +230,20 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpUavDesc2.Format = DXGI_FORMAT_UNKNOWN;
 	CmpUavDesc2.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
 	CmpUavDesc2.Buffer.FirstElement = 0;
-	CmpUavDesc2.Buffer.NumElements = 1;
-	CmpUavDesc2.Buffer.StructureByteStride = sizeof(mesh_comp_culling_common_input);
+	CmpUavDesc2.Buffer.NumElements = DrawCount;
+	CmpUavDesc2.Buffer.StructureByteStride = sizeof(mesh_draw_command);
 	CmpUavDesc2.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshCommonCullingData.Handle.Get(), nullptr, &CmpUavDesc2, CmpDescriptorHeapHandle);
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshDrawCommandBuffer.Handle.Get(), nullptr, &CmpUavDesc2, CmpDescriptorHeapHandle);
+	CmpDescriptorHeapHandle.ptr += DirectWindow.Gfx->ResourceHeapIncrement;
+
+	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc3 = {};
+	CmpUavDesc3.Format = DXGI_FORMAT_UNKNOWN;
+	CmpUavDesc3.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	CmpUavDesc3.Buffer.FirstElement = 0;
+	CmpUavDesc3.Buffer.NumElements = 1;
+	CmpUavDesc3.Buffer.StructureByteStride = sizeof(mesh_comp_culling_common_input);
+	CmpUavDesc3.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshCommonCullingData.Handle.Get(), nullptr, &CmpUavDesc3, CmpDescriptorHeapHandle);
 
 	auto SamplerDescriptorHeapHandle = DirectWindow.Gfx->CmpResourceHeap->GetCPUDescriptorHandleForHeapStart();
 	SamplerDescriptorHeapHandle.ptr += 16 * DirectWindow.Gfx->ResourceHeapIncrement;
@@ -257,13 +280,13 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	}
 
 	shader_input GfxRootSignature;
-	GfxRootSignature.PushConstantBuffer(0, 0)->
-					 PushConstantBuffer(1, 0)->
+	GfxRootSignature.PushShaderResource(0, 0)->
+					 PushConstantBuffer(0, 0)->
 					 Build(DirectWindow.Gfx->Device.Get(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	shader_input CmpIndirectFrustRootSignature;
 	CmpIndirectFrustRootSignature.PushShaderResourceTable(0, 1, 0)-> // Mesh Offsets
-					 PushUnorderedAccessTable(0, 3, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE)-> // Common Data, Indirect Commands
+					 PushUnorderedAccessTable(0, 4, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE)-> // Common Data, Indirect Commands
 					 PushUnorderedAccess(0, 1)-> // Common Input
 					 Build(DirectWindow.Gfx->Device.Get());
 
@@ -283,13 +306,13 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 						   Build(DirectWindow.Gfx->Device.Get());
 
 	indirect_command_signature DrawIndirectCommandSignature;
-	DrawIndirectCommandSignature.PushConstantBuffer(0)->
+	DrawIndirectCommandSignature.PushShaderResource(0)->
 								 PushConstantBuffer(1)->
 								 PushCommandDraw()->
 								 Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get());
 
 	indirect_command_signature DrawIndexedIndirectCommandSignature;
-	DrawIndexedIndirectCommandSignature.PushConstantBuffer(0)->
+	DrawIndexedIndirectCommandSignature.PushShaderResource(0)->
 										PushConstantBuffer(1)->
 										PushCommandDrawIndexed()->
 										Build(DirectWindow.Gfx->Device.Get(), GfxRootSignature.Handle.Get());
@@ -445,9 +468,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 					NewHiHeight = max(1, HiHeight >> (DepthTextureIdx));
 
 					CmpCommandList->SetComputeRootDescriptorTable(0, In);
-					//DepthReduceInput.MipLevel = DepthTextureIdx;
-					//DepthReduceInputBuffer.Update(DirectWindow.Gfx, &DepthReduceInput);
-					//CmpCommandList->SetComputeRootShaderResourceView(1, DepthReduceInputBuffer.GpuPtr);
 					CmpCommandList->SetComputeRootDescriptorTable(1, Out);
 					CmpCommandList->Dispatch(u32((NewHiWidth + 31) / 32), u32((NewHiHeight + 31) / 32), 1);
 				}

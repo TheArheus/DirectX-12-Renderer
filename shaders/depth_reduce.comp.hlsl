@@ -21,6 +21,4 @@ void main(uint3 DispatchIndex : SV_DispatchThreadID)
 	float4 Depth = InputDepth.Gather(DepthSampler, InputDepthUV);
 
 	OutputDepth[DispatchIndex.xy] = (Depth.x + Depth.y + Depth.z + Depth.w) / 4;
-	//OutputDepth[DispatchIndex.xy] = min(min(Depth.x, Depth.y), min(Depth.z, Depth.w));
-	//OutputDepth[DispatchIndex.xy] = max(max(Depth.x, Depth.y), max(Depth.z, Depth.w));
 }

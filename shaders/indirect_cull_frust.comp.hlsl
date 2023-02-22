@@ -75,10 +75,20 @@ struct mesh_draw_command_data
 	bool     IsVisible;
 };
 
+struct mesh_draw_command
+{
+	float4   Translate;
+	float    Scale;
+	float    Pad0;
+	float    Pad1;
+	float    Pad2;
+};
+
 StructuredBuffer<mesh_offset> MeshOffsets : register(t0, space0);
 RWStructuredBuffer<mesh_draw_command_data> MeshDrawCommandData : register(u0, space0);
-AppendStructuredBuffer<indirect_draw_command> IndirectDrawCommands : register(u1, space0);
-AppendStructuredBuffer<indirect_draw_indexed_command> IndirectDrawIndexedCommands : register(u2, space0);
+RWStructuredBuffer<indirect_draw_command> IndirectDrawCommands : register(u1, space0);
+RWStructuredBuffer<indirect_draw_indexed_command> IndirectDrawIndexedCommands : register(u2, space0);
+RWStructuredBuffer<mesh_draw_command> MeshDrawCommands : register(u3, space0);
 RWStructuredBuffer<mesh_culling_common_input> MeshCullingCommonInput : register(u0, space1);
 
 
@@ -86,12 +96,22 @@ RWStructuredBuffer<mesh_culling_common_input> MeshCullingCommonInput : register(
 void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 {
 	uint DrawIndex = ThreadGroupID.x * 32 + ThreadID.x;
+	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex;
+	if(DrawIndex == 0)
+	{
+		IndirectDrawCommands.IncrementCounter();
+		IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount = 0;
+
+		IndirectDrawIndexedCommands.IncrementCounter();
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_InstanceCount = 0;
+
+		MeshCullingCommonInput[0].DrawCount = 0;
+	}
+
 	if(!MeshDrawCommandData[DrawIndex].IsVisible)
 	{
 		return;
 	}
-
-	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex;
 
 	float4x4 Proj = MeshCullingCommonInput[0].Proj;
 
@@ -124,28 +144,40 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 #endif
 	}
 
-	if(IsVisible)
+#if 0
+	if(ThreadID.x == 31)
 	{
+		InterlockedAdd(IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount, WaveActiveCountBits(IsVisible));
+		InterlockedAdd(IndirectDrawIndexedCommands[MeshIndex].IndexDraw_InstanceCount, WaveActiveCountBits(IsVisible));
+	}
+#endif
+
+	if(IsVisible && MeshDrawCommandData[DrawIndex].IsVisible)
+	{
+		uint DrawCommandIdx;
 		indirect_draw_command IndirectDrawCommand;
 		indirect_draw_indexed_command IndirectDrawIndexedCommand;
 
-		IndirectDrawCommand.BufferPtr = MeshDrawCommandData[DrawIndex].Buffer1;
-		IndirectDrawCommand.BufferPtr1 = MeshDrawCommandData[DrawIndex].Buffer2;
-		IndirectDrawCommand.VertexDraw_VertexCountPerInstance = MeshOffsets[MeshIndex].VertexCount;
-		IndirectDrawCommand.VertexDraw_DrawInstanceCount = 1;
-		IndirectDrawCommand.VertexDraw_StartVertexLocation = MeshOffsets[MeshIndex].VertexOffset;
-		IndirectDrawCommand.VertexDraw_StartInstanceLocation = 0;
+		InterlockedAdd(MeshCullingCommonInput[0].DrawCount, 1, DrawCommandIdx);
 
-		IndirectDrawIndexedCommand.BufferPtr = MeshDrawCommandData[DrawIndex].Buffer1;
-		IndirectDrawIndexedCommand.BufferPtr1 = MeshDrawCommandData[DrawIndex].Buffer2;
-		IndirectDrawIndexedCommand.IndexDraw_IndexCountPerInstance = MeshOffsets[MeshIndex].IndexCount;
-		IndirectDrawIndexedCommand.IndexDraw_InstanceCount = 1;
-		IndirectDrawIndexedCommand.IndexDraw_StartIndexLocation = MeshOffsets[MeshIndex].IndexOffset;
-		IndirectDrawIndexedCommand.IndexDraw_BaseVertexLocation = 0;
-		IndirectDrawIndexedCommand.IndexDraw_StartInstanceLocation = 0;
+		IndirectDrawCommands[MeshIndex].BufferPtr = MeshDrawCommandData[DrawIndex].Buffer1;
+		IndirectDrawCommands[MeshIndex].BufferPtr1 = MeshDrawCommandData[DrawIndex].Buffer2;
+		IndirectDrawCommands[MeshIndex].VertexDraw_VertexCountPerInstance = MeshOffsets[MeshIndex].VertexCount;
+		IndirectDrawCommands[MeshIndex].VertexDraw_StartVertexLocation = MeshOffsets[MeshIndex].VertexOffset;
+		IndirectDrawCommands[MeshIndex].VertexDraw_StartInstanceLocation = 0;
 
-		IndirectDrawCommands.Append(IndirectDrawCommand);
-		IndirectDrawIndexedCommands.Append(IndirectDrawIndexedCommand);
+		IndirectDrawIndexedCommands[MeshIndex].BufferPtr = MeshDrawCommandData[DrawIndex].Buffer1;
+		IndirectDrawIndexedCommands[MeshIndex].BufferPtr1 = MeshDrawCommandData[DrawIndex].Buffer2;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_IndexCountPerInstance = MeshOffsets[MeshIndex].IndexCount;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_StartIndexLocation = MeshOffsets[MeshIndex].IndexOffset;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_BaseVertexLocation = 0;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_StartInstanceLocation = 0;
+
+		MeshDrawCommands[DrawCommandIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;
+		MeshDrawCommands[DrawCommandIdx].Scale = MeshDrawCommandData[DrawIndex].Scale;
+
+		InterlockedAdd(IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount, 1);
+		InterlockedAdd(IndirectDrawIndexedCommands[MeshIndex].IndexDraw_InstanceCount, 1);
 	}
 }
 

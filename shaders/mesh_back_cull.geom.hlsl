@@ -15,16 +15,9 @@ struct vert_out
 [maxvertexcount(3)]
 void main(triangle vert_in TrianIn[3], inout TriangleStream<vert_out> TrianOut)
 {
-	float3 CameraDir = float3(0, 0, -1);
-	
 	float4 AB = TrianIn[0].Pos - TrianIn[1].Pos;
 	float4 CB = TrianIn[2].Pos - TrianIn[1].Pos;
 	float3 NewNorm = cross(AB.xyz, CB.xyz);
-	if(dot(NewNorm, CameraDir) < 0)
-	{
-		//TrianOut.RestartStrip();
-		return;
-	}
 
 	for(uint VertIdx = 0;
 		VertIdx < 3;
@@ -32,7 +25,7 @@ void main(triangle vert_in TrianIn[3], inout TriangleStream<vert_out> TrianOut)
 	{
 		vert_out Res;
 		Res.Pos = TrianIn[VertIdx].Pos;
-		Res.Col = TrianIn[VertIdx].Col;
+		Res.Col = float4(NewNorm * 0.5 + float3(0.5, 0.5, 0.5), 1.0); //TrianIn[VertIdx].Col;
 		TrianOut.Append(Res);
 	}
 	//TrianOut.RestartStrip();
