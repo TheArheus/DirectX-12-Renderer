@@ -34,47 +34,48 @@ struct buffer
 {
 	template<class T>
 	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, 
-		   u64 Offset, void* Data, u64 NewSize, u64 Alignment = 0, 
-		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+		   u64 Offset, void* Data, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize), WithCounter(NewWithCounter)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 
-		u64 BufferSize = Alignment == 0 ? Size : AlignUp(Size, Alignment);
+		u64 BufferSize = Alignment == 0 ? Size + WithCounter * sizeof(u32) : AlignUp(Size + WithCounter * sizeof(u32), Alignment);
 		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
 		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
 
+		D3D12_CLEAR_VALUE Clear = {};
 		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		App->Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
 
 		void* CpuPtr;
 		TempBuffer->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
+		memcpy(CpuPtr, Data, NewSize);
 		TempBuffer->Unmap(0, 0);
 
-		App->GfxCommandAlloc->Reset();
-		App->GfxCommandList->Reset(App->GfxCommandAlloc.Get(), nullptr);
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
 
-		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandList->Close();
-		ID3D12CommandList* GfxCmdLists[] = { App->GfxCommandList.Get() };
-		App->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-		App->Flush(App->GfxCommandQueue.Get());
+		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
+		CounterOffset = NewSize;
 	}
 
 	template<class T>
 	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, 
-		   u64 Offset, u64 NewSize, u64 Alignment = 0, 
-		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+		   u64 Offset, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize), WithCounter(NewWithCounter)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 
-		u64 BufferSize = Alignment == 0 ? Size : AlignUp(Size, Alignment);
+		u64 BufferSize = Alignment == 0 ? Size + WithCounter * sizeof(u32) : AlignUp(Size + WithCounter * sizeof(u32), Alignment);
 		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
@@ -83,18 +84,32 @@ struct buffer
 		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		App->Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
 
+		void* CpuPtr;
+		TempBuffer->Map(0, nullptr, &CpuPtr);
+		memset(CpuPtr, 0, Size);
+		TempBuffer->Unmap(0, 0);
+
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
+
+		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
+
 		GpuPtr = Handle->GetGPUVirtualAddress();
+		CounterOffset = NewSize;
 	}
 
 	template<class T>
 	buffer(std::unique_ptr<T>& App, 
-		   void* Data, u64 NewSize, u64 Alignment = 0, 
-		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+		   void* Data, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize), WithCounter(NewWithCounter)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 
-		u64 BufferSize = Alignment == 0 ? Size : AlignUp(Size, Alignment);
+		u64 BufferSize = Alignment == 0 ? Size + WithCounter * sizeof(u32) : AlignUp(Size + WithCounter * sizeof(u32), Alignment);
 		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
@@ -106,29 +121,30 @@ struct buffer
 
 		void* CpuPtr;
 		TempBuffer->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
+		memcpy(CpuPtr, Data, NewSize);
 		TempBuffer->Unmap(0, 0);
 
-		App->GfxCommandAlloc->Reset();
-		App->GfxCommandList->Reset(App->GfxCommandAlloc.Get(), nullptr);
-		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandList->Close();
-		ID3D12CommandList* GfxCmdLists[] = { App->GfxCommandList.Get() };
-		App->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-		App->Flush(App->GfxCommandQueue.Get());
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
+
+		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
+		CounterOffset = NewSize;
 	}
 
 	template<class T>
 	buffer(std::unique_ptr<T>& App, 
-		   u64 NewSize, u64 Alignment = 0, 
-		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize)
+		   u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize), WithCounter(NewWithCounter)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 
-		u64 BufferSize = Alignment == 0 ? Size : AlignUp(Size, Alignment);
+		u64 BufferSize = Alignment == 0 ? Size + WithCounter * sizeof(u32) : AlignUp(Size + WithCounter * sizeof(u32), Alignment);
 		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
@@ -138,7 +154,21 @@ struct buffer
 		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
 		App->Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
 
+		void* CpuPtr;
+		TempBuffer->Map(0, nullptr, &CpuPtr);
+		memset(CpuPtr, 0, Size);
+		TempBuffer->Unmap(0, 0);
+
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
+
+		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
+
 		GpuPtr = Handle->GetGPUVirtualAddress();
+		CounterOffset = NewSize;
 	}
 
 	template<class T>
@@ -154,49 +184,52 @@ struct buffer
 		memcpy(CpuPtr, Data, Size);
 		TempBuffer->Unmap(0, 0);
 
-		App->GfxCommandAlloc->Reset();
-		App->GfxCommandList->Reset(App->GfxCommandAlloc.Get(), nullptr);
-		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandList->Close();
-		ID3D12CommandList* GfxCmdLists[] = { App->GfxCommandList.Get() };
-		App->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-		App->Flush(App->GfxCommandQueue.Get());
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
+
+		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
 	}
 
 	template<class T>
 	void ReadBack(std::unique_ptr<T>& App, void* Data)
 	{
-		App->Flush(App->GfxCommandQueue.Get());
+		App->Fence.Flush(App->GfxCommandQueue);
 
 		ComPtr<ID3D12Resource> TempBuffer;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
 		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(Size);
 		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&TempBuffer));
 
-		App->GfxCommandAlloc->Reset();
-		App->GfxCommandList->Reset(App->GfxCommandAlloc.Get(), nullptr);
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
 
 		CD3DX12_RESOURCE_BARRIER Barrier[] = 
 		{
 			CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE),
 		};
-		App->GfxCommandList->ResourceBarrier(1, Barrier);
+		GfxCommandList->ResourceBarrier(1, Barrier);
 
-		App->GfxCommandList->CopyResource(TempBuffer.Get(), Handle.Get());
+		GfxCommandList->CopyResource(TempBuffer.Get(), Handle.Get());
 
 		Barrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
-		App->GfxCommandList->ResourceBarrier(1, Barrier);
+		GfxCommandList->ResourceBarrier(1, Barrier);
 
-		App->GfxCommandList->Close();
-		ID3D12CommandList* GfxCmdLists[] = { App->GfxCommandList.Get() };
-		App->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-		App->Flush(App->GfxCommandQueue.Get());
+		GfxCommandList->CopyResource(TempBuffer.Get(), Handle.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
 
 		void* CpuPtr;
 		TempBuffer->Map(0, nullptr, &CpuPtr);
 		memcpy(Data, CpuPtr, Size);
 		TempBuffer->Unmap(0, 0);
 	}
+
+	u32  CounterOffset = 0;
+	bool WithCounter   = false;
 
 	D3D12_GPU_VIRTUAL_ADDRESS GpuPtr = 0;
 	ComPtr<ID3D12Resource> Handle;
@@ -238,13 +271,13 @@ struct texture
 		memcpy(CpuPtr, Data, Size);
 		TempBuffer->Unmap(0, 0);
 
-		App->GfxCommandAlloc->Reset();
-		App->GfxCommandList->Reset(App->GfxCommandAlloc.Get(), nullptr);
-		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandList->Close();
-		ID3D12CommandList* GfxCmdLists[] = { App->GfxCommandList.Get() };
-		App->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-		App->Flush(App->GfxCommandQueue.Get());
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
+
+		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
 	}
 
 	template<class T>
@@ -301,13 +334,13 @@ struct texture
 		memcpy(CpuPtr, Data, Size);
 		TempBuffer->Unmap(0, 0);
 
-		App->GfxCommandAlloc->Reset();
-		App->GfxCommandList->Reset(App->GfxCommandAlloc.Get(), nullptr);
-		App->GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandList->Close();
-		ID3D12CommandList* GfxCmdLists[] = { App->GfxCommandList.Get() };
-		App->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-		App->Flush(App->GfxCommandQueue.Get());
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
+
+		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
 	}
 
 	template<class T>
@@ -336,7 +369,7 @@ struct texture
 	template<class T>
 	void ReadBack(std::unique_ptr<T>& App, void* Data)
 	{
-		App->Flush(App->GfxCommandQueue.Get());
+		App->Fence.Flush(App->GfxCommandQueue);
 
 		ComPtr<ID3D12Resource> TempBuffer;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
@@ -356,24 +389,24 @@ struct texture
 
 		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&TempBuffer));
 
-		App->GfxCommandAlloc->Reset();
-		App->GfxCommandList->Reset(App->GfxCommandAlloc.Get(), nullptr);
+		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
+		App->GfxCommandQueue.Reset();
+		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
 
 		CD3DX12_RESOURCE_BARRIER Barrier[] = 
 		{
 			CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE),
 		};
-		App->GfxCommandList->ResourceBarrier(1, Barrier);
+		GfxCommandList->ResourceBarrier(1, Barrier);
 
-		App->GfxCommandList->CopyResource(TempBuffer.Get(), Handle.Get());
+		GfxCommandList->CopyResource(TempBuffer.Get(), Handle.Get());
 
 		Barrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
-		App->GfxCommandList->ResourceBarrier(1, Barrier);
+		GfxCommandList->ResourceBarrier(1, Barrier);
 
-		App->GfxCommandList->Close();
-		ID3D12CommandList* GfxCmdLists[] = { App->GfxCommandList.Get() };
-		App->GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-		App->Flush(App->GfxCommandQueue.Get());
+		GfxCommandList->CopyResource(TempBuffer.Get(), Handle.Get());
+		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
+		App->Fence.Flush(App->GfxCommandQueue);
 
 		u64 Size = Width * Height * GetFormatSize(Format);
 		void* CpuPtr;

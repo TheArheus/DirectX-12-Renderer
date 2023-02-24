@@ -48,6 +48,30 @@ constexpr size_t GiB(size_t val) { return MiB(val) * 1024; };
 
 template<typename T> struct type_name_res;
 
+u32 GetImageMipLevels(u32 Width, u32 Height)
+{
+	u32 Result = 1;
+
+	while(Width > 1 || Height > 1)
+	{
+		Result++;
+		Width  >>= 1;
+		Height >>= 1;
+	}
+
+	return Result;
+}
+
+u32 PreviousPowerOfTwo(u32 x)
+{
+	x = x | (x >> 1);
+    x = x | (x >> 2);
+    x = x | (x >> 4);
+    x = x | (x >> 8);
+    x = x | (x >> 16);
+    return x - (x >> 1);
+}
+
 #include "math.h"
 #include "mesh.h"
 #include "directx_utilities.hpp"
@@ -55,5 +79,6 @@ template<typename T> struct type_name_res;
 #include "indirect_command_signature.hpp"
 #include "shader_input_signature.hpp"
 #include "renderer_directx12.h"
+#include "pipeline_contexts.hpp"
 #include "win32_window.h"
 

@@ -327,6 +327,8 @@ u32 GetFormatSize(DXGI_FORMAT Format)
 			}
 #endif
 	}
+
+	return 1;
 }
 
 #define DIRECTX_UTILITIES_H_

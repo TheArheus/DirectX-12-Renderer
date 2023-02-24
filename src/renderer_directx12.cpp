@@ -26,9 +26,6 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		GetDevice(&Device);
 	}
 
-	Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&Fence));
-	FenceEvent = CreateEvent(nullptr, 0, 0, nullptr);
-
 	if(SUCCEEDED(Factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &TearingSupport, sizeof(TearingSupport))))
 	{
 		TearingSupport = true;
@@ -41,22 +38,9 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 	MsaaQuality = MsQualityLevels.NumQualityLevels;
 	if (MsaaQuality < 2) MsaaState = false;
 
-	D3D12_COMMAND_QUEUE_DESC GfxCommandQueueDesc = {};
-	GfxCommandQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-	GfxCommandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	Device->CreateCommandQueue(&GfxCommandQueueDesc, IID_PPV_ARGS(&GfxCommandQueue));
-	D3D12_COMMAND_QUEUE_DESC CmpCommandQueueDesc = {};
-	CmpCommandQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
-	CmpCommandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	Device->CreateCommandQueue(&CmpCommandQueueDesc, IID_PPV_ARGS(&CmpCommandQueue));
-
-	Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&GfxCommandAlloc));
-	Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&CmpCommandAlloc));
-
-	Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, GfxCommandAlloc.Get(), nullptr, IID_PPV_ARGS(&GfxCommandList));
-	Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COMPUTE, CmpCommandAlloc.Get(), nullptr, IID_PPV_ARGS(&CmpCommandList));
-	GfxCommandList->Close();
-	CmpCommandList->Close();
+	GfxCommandQueue.Init(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT);
+	CmpCommandQueue.Init(Device.Get(), D3D12_COMMAND_LIST_TYPE_COMPUTE);
+	Fence.Init(Device.Get());
 
 	{
 		ComPtr<IDXGISwapChain1> _SwapChain;
@@ -70,14 +54,12 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		SwapChainDesc.SampleDesc.Count = MsaaState ? 4 : 1;
 		SwapChainDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
-		Factory->CreateSwapChainForHwnd(GfxCommandQueue.Get(), Window, &SwapChainDesc, nullptr, nullptr, _SwapChain.GetAddressOf());
+		Factory->CreateSwapChainForHwnd(GfxCommandQueue.Handle.Get(), Window, &SwapChainDesc, nullptr, nullptr, _SwapChain.GetAddressOf());
 		_SwapChain.As(&SwapChain);
 	}
 
 	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 
-	GfxCommandAlloc->Reset();
-	GfxCommandList->Reset(GfxCommandAlloc.Get(), nullptr);
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC RtvHeapDesc = {};
 		RtvHeapDesc.NumDescriptors = 2;
@@ -133,14 +115,7 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
 
 		Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
-
-		//auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-		//GfxCommandList->ResourceBarrier(1, &Barrier);
 	}
-	GfxCommandList->Close();
-	ID3D12CommandList* GfxCmdLists[] = { GfxCommandList.Get() };
-	GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-	Flush(GfxCommandQueue.Get());
 };
 
 ID3D12PipelineState* renderer_backend::
@@ -246,41 +221,17 @@ CreateComputePipeline(ID3D12RootSignature* CmpRootSignature, const std::string& 
 }
 
 void renderer_backend::
-Flush(ID3D12CommandQueue* CommandQueue)
-{
-	FenceSignal(CommandQueue);
-	FenceWait();
-}
-
-void renderer_backend::
-FenceSignal(ID3D12CommandQueue* CommandQueue)
-{
-	CommandQueue->Signal(Fence.Get(), ++CurrentFence);
-}
-
-void renderer_backend::
-FenceWait()
-{
-	if(Fence->GetCompletedValue() < CurrentFence)
-	{
-		HANDLE Event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-		Fence->SetEventOnCompletion(CurrentFence, Event);
-		WaitForSingleObject(Event, INFINITE);
-		CloseHandle(Event);
-	}
-}
-
-void renderer_backend::
 RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 {
-	Flush(GfxCommandQueue.Get());
+	Fence.Flush(GfxCommandQueue);
+	ID3D12GraphicsCommandList* CommandList = GfxCommandQueue.AllocateCommandList();
 
 	Viewport.Width  = (r32)NewWidth;
 	Viewport.Height = (r32)NewHeight;
 	Rect = { 0, 0, (LONG)NewWidth, (LONG)NewHeight };
 
-	GfxCommandAlloc->Reset();
-	GfxCommandList->Reset(GfxCommandAlloc.Get(), nullptr);
+	GfxCommandQueue.Reset();
+	CommandList->Reset(GfxCommandQueue.CommandAlloc.Get(), nullptr);
 
 	for (u32 Idx = 0;
 		Idx < 2;
@@ -324,14 +275,8 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 
 	Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
 
-	//auto Barrier = CD3DX12_RESOURCE_BARRIER::Transition(DepthStencilBuffer.Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-	//GfxCommandList->ResourceBarrier(1, &Barrier);
-
-	GfxCommandList->Close();
-	ID3D12CommandList* GfxCmdLists[] = { GfxCommandList.Get() };
-	GfxCommandQueue->ExecuteCommandLists(_countof(GfxCmdLists), GfxCmdLists);
-
-	Flush(GfxCommandQueue.Get());
+	GfxCommandQueue.ExecuteAndRemove(CommandList);
+	Fence.Flush(GfxCommandQueue);
 }
 
 #if 0
@@ -368,24 +313,8 @@ PushIndexedVertexData(buffer* VertexBuffer, buffer* IndexBuffer, std::vector<mes
 }
 
 void renderer_backend::
-Draw()
-{
-	for(const vertex_buffer_view& View : VertexViews)
-	{
-		GfxCommandList->IASetVertexBuffers(0, 1, &View.Handle);
-		GfxCommandList->DrawInstanced(View.VertexCount, 1, View.VertexBegin, 0);
-	}
-}
-
-void renderer_backend::
 DrawIndexed()
 {
-	for(const std::pair<vertex_buffer_view, index_buffer_view>& View : IndexedVertexViews)
-	{
-		GfxCommandList->IASetVertexBuffers(0, 1, &View.first.Handle);
-		GfxCommandList->IASetIndexBuffer(&View.second.Handle);
-		GfxCommandList->DrawIndexedInstanced(View.second.IndexCount, 1, View.second.IndexBegin, 0, 0);
-	}
 }
 #endif
 

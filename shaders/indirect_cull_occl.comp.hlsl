@@ -34,10 +34,13 @@ struct mesh_culling_common_input
 {
 	plane Planes[6];
 	uint DrawCount;
+	uint MeshCount;
 	uint FrustrumCullingEnabled;
 	uint OcclusionCullingEnabled;
 	float HiZWidth;
 	float HiZHeight;
+	uint Pad0;
+	uint Pad1;
 	row_major float4x4 Proj;
 };
 

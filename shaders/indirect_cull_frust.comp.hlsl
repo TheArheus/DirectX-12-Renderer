@@ -34,10 +34,13 @@ struct mesh_culling_common_input
 {
 	plane Planes[6];
 	uint DrawCount;
+	uint MeshCount;
 	uint FrustrumCullingEnabled;
 	uint OcclusionCullingEnabled;
 	float HiZWidth;
 	float HiZHeight;
+	uint Pad0;
+	uint Pad1;
 	row_major float4x4 Proj;
 };
 
@@ -100,9 +103,9 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 	if(DrawIndex == 0)
 	{
 		IndirectDrawCommands.IncrementCounter();
-		IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount = 0;
-
 		IndirectDrawIndexedCommands.IncrementCounter();
+
+		IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount = 0;
 		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_InstanceCount = 0;
 
 		MeshCullingCommonInput[0].DrawCount = 0;
@@ -144,15 +147,7 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 #endif
 	}
 
-#if 0
-	if(ThreadID.x == 31)
-	{
-		InterlockedAdd(IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount, WaveActiveCountBits(IsVisible));
-		InterlockedAdd(IndirectDrawIndexedCommands[MeshIndex].IndexDraw_InstanceCount, WaveActiveCountBits(IsVisible));
-	}
-#endif
-
-	if(IsVisible && MeshDrawCommandData[DrawIndex].IsVisible)
+	if(IsVisible)
 	{
 		uint DrawCommandIdx;
 		indirect_draw_command IndirectDrawCommand;

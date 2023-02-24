@@ -35,6 +35,9 @@ public:
 	window& operator=(window&& rhs) = default;
 	~window()
 	{
+		Gfx->Fence.Flush(Gfx->CmpCommandQueue);
+		Gfx->Fence.Flush(Gfx->GfxCommandQueue);
+
 		DestroyWindow(Handle);
 		WindowClass.WindowNames.erase(std::remove(WindowClass.WindowNames.begin(), WindowClass.WindowNames.end(), Name), WindowClass.WindowNames.end());
 		if(WindowClass.WindowNames.size() == 0)
