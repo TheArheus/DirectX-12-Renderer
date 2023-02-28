@@ -8,6 +8,8 @@ struct indirect_draw_command
 	uint VertexDraw_DrawInstanceCount;
 	uint VertexDraw_StartVertexLocation;
 	uint VertexDraw_StartInstanceLocation;
+
+	uint DrawCount;
 };
 
 struct indirect_draw_indexed_command
@@ -20,6 +22,8 @@ struct indirect_draw_indexed_command
 	uint IndexDraw_StartIndexLocation;
 	int  IndexDraw_BaseVertexLocation;
 	uint IndexDraw_StartInstanceLocation;
+
+	uint DrawCount;
 };
 
 struct plane
@@ -33,14 +37,10 @@ struct plane
 struct mesh_culling_common_input
 {
 	plane Planes[6];
-	uint DrawCount;
-	uint MeshCount;
-	uint FrustrumCullingEnabled;
-	uint OcclusionCullingEnabled;
+	uint  FrustrumCullingEnabled;
+	uint  OcclusionCullingEnabled;
 	float HiZWidth;
 	float HiZHeight;
-	uint Pad0;
-	uint Pad1;
 	row_major float4x4 Proj;
 };
 
@@ -105,7 +105,7 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 	float3 ProjBoxMin = ProjMinTemp.xyz / ProjMinTemp.w;
 	float3 ProjBoxMax = ProjMaxTemp.xyz / ProjMaxTemp.w;
 
-	bool IsVisible = true;
+	bool IsVisible = MeshDrawCommandData[DrawIndex].IsVisible;
 	// Frustum Culling
 	if(MeshCullingCommonInput[0].FrustrumCullingEnabled)
 	{
@@ -119,15 +119,15 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 
 	// Occlusion Culling
 	bool IsNotOcclCulled = true;
-	float3 BoxDims = (ProjBoxMax - ProjBoxMin);
-	if(IsVisible && MeshCullingCommonInput[0].OcclusionCullingEnabled)
+	if(MeshCullingCommonInput[0].OcclusionCullingEnabled)
 	{
+		float3 BoxDims = (ProjBoxMax - ProjBoxMin);
 		uint Lod = ceil(log2(max(BoxDims.x * MeshCullingCommonInput[0].HiZWidth, BoxDims.y * MeshCullingCommonInput[0].HiZHeight)));
 
 		float4 Texel = HiZDepthTextures[Lod].Gather(DepthSampler, BoxDims.xy * 0.5);
 
 		float ObjDepth = ProjBoxMax.z;
-		IsNotOcclCulled = (ObjDepth > (min(min(Texel.x, Texel.y), min(Texel.z, Texel.w)) - 0.01));
+		IsNotOcclCulled = (ObjDepth >= (min(min(Texel.x, Texel.y), min(Texel.z, Texel.w))) - 0.01);
 	}
 
 	MeshDrawCommandData[DrawIndex].IsVisible = IsNotOcclCulled && IsVisible;

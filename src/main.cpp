@@ -12,6 +12,7 @@ struct indirect_draw_command
 	D3D12_GPU_VIRTUAL_ADDRESS Buffer;
 	D3D12_GPU_VIRTUAL_ADDRESS Buffer1;
 	D3D12_DRAW_ARGUMENTS DrawArg; // 4
+	u32 DrawCount;
 };
 
 struct indirect_draw_indexed_command
@@ -19,6 +20,7 @@ struct indirect_draw_indexed_command
 	D3D12_GPU_VIRTUAL_ADDRESS Buffer;
 	D3D12_GPU_VIRTUAL_ADDRESS Buffer1;
 	D3D12_DRAW_INDEXED_ARGUMENTS DrawIndexedArg; // 5
+	u32 DrawCount;
 };
 
 struct mesh_draw_command_input
@@ -49,14 +51,10 @@ struct global_world_data
 struct mesh_comp_culling_common_input
 {
 	plane CullingPlanes[6];
-	u32 DrawCount;
-	u32 MeshCount;
 	u32 FrustrumCullingEnabled;
 	u32 OcclusionCullingEnabled;
 	float HiZWidth;
 	float HiZHeight;
-	u32 Pad0;
-	u32 Pad1;
 	mat4 Proj;
 };
 
@@ -77,13 +75,14 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	srand(512);
 	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
 
+	mesh Cube("..\\assets\\cube.obj");
 	mesh Geometries({"..\\assets\\kitten.obj"}, generate_aabb | generate_sphere);
 	std::vector<mesh_draw_command_input> MeshDrawCommandData(DrawCount);
 	std::vector<indirect_draw_command> IndirectDrawCommandVector(DrawCount);
 	std::vector<indirect_draw_indexed_command> IndirectDrawIndexedCommandVector(DrawCount);
 
-	u32 ZeroBufferData = 0;
-	buffer ZeroBuffer(DirectWindow.Gfx, &ZeroBufferData, sizeof(u32));
+	u32 GeometriesCounterBufferData = Geometries.Offsets.size();
+	buffer GeometriesCounterBuffer(DirectWindow.Gfx, &GeometriesCounterBufferData, sizeof(u32));
 
 	memory_heap VertexHeap(MiB(16));
 	memory_heap IndexHeap(MiB(16));
@@ -97,8 +96,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};
 	MeshCompCullingCommonData.FrustrumCullingEnabled = true;
 	MeshCompCullingCommonData.OcclusionCullingEnabled = true;
-	MeshCompCullingCommonData.DrawCount = DrawCount;
-	MeshCompCullingCommonData.MeshCount = Geometries.Offsets.size();
 	MeshCompCullingCommonData.Proj = WorldUpdate.Proj;
 	GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, WorldUpdate.Proj, 1);
 
@@ -113,7 +110,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	{
 		mesh_draw_command_input& CommandData = MeshDrawCommandData[DataIdx];
 		CommandData.MeshIndex = rand() % Geometries.Offsets.size();
-		CommandData.Buffer1 = MeshDrawCommandBuffer.GpuPtr; //MeshDrawCommandDataBuffer.GpuPtr + sizeof(mesh_draw_command_input) * DataIdx;
+		CommandData.Buffer1 = MeshDrawCommandBuffer.GpuPtr;
 		CommandData.Buffer2 = WorldUpdateBuffer.GpuPtr;
 
 		CommandData.IsVisible = true;
@@ -301,7 +298,11 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	compute_context OcclCullingContext(DirectWindow.Gfx, CmpIndirectOcclRootSignature, "..\\build\\indirect_cull_occl.comp.cso");
 	compute_context ReduceContext(DirectWindow.Gfx, CmpReduceRootSignature, "..\\build\\depth_reduce.comp.cso");
 
-	ID3D12GraphicsCommandList* GfxCommandList = DirectWindow.Gfx->GfxCommandQueue.AllocateCommandList();
+	heap_alloc RtvHeapMap = DirectWindow.Gfx->RtvHeap.Allocate(2);
+	heap_alloc DsvHeapMap = DirectWindow.Gfx->DsvHeap.Allocate(1);
+	DirectWindow.Gfx->RtvHeap.Reset();
+	DirectWindow.Gfx->DsvHeap.Reset();
+
 	double TimeLast = window::GetTimestamp();
 	double AvgCpuTime = 0.0;
 	while(DirectWindow.IsRunning())
@@ -321,8 +322,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				FrustCullingContext.SetDescriptorTable(1, CmpResourceHeapHandle);
 				FrustCullingContext.SetUnorderedAccessView(2, MeshCommonCullingData.GpuPtr);
 
-				FrustCullingContext.CommandList->CopyBufferRegion(IndirectDrawCommands.Handle.Get(), DrawCount * sizeof(indirect_draw_command), ZeroBuffer.Handle.Get(), 0, sizeof(u32));
-				FrustCullingContext.CommandList->CopyBufferRegion(IndirectDrawIndexedCommands.Handle.Get(), DrawCount * sizeof(indirect_draw_indexed_command), ZeroBuffer.Handle.Get(), 0, sizeof(u32));
+				FrustCullingContext.CommandList->CopyBufferRegion(IndirectDrawCommands.Handle.Get(), IndirectDrawCommands.CounterOffset, GeometriesCounterBuffer.Handle.Get(), 0, sizeof(u32));
+				FrustCullingContext.CommandList->CopyBufferRegion(IndirectDrawIndexedCommands.Handle.Get(), IndirectDrawIndexedCommands.CounterOffset, GeometriesCounterBuffer.Handle.Get(), 0, sizeof(u32));
 
 				D3D12_RESOURCE_BARRIER Barrier[] = 
 				{
@@ -341,8 +342,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			}
 
 			{
-				CD3DX12_CPU_DESCRIPTOR_HANDLE RenderViewHandle(DirectWindow.Gfx->RtvHeap->GetCPUDescriptorHandleForHeapStart(), DirectWindow.Gfx->BackBufferIndex, DirectWindow.Gfx->RtvSize);
-				D3D12_CPU_DESCRIPTOR_HANDLE DepthStencilHandle = DirectWindow.Gfx->DsvHeap->GetCPUDescriptorHandleForHeapStart();
+				auto RtvHandle = RtvHeapMap[DirectWindow.Gfx->BackBufferIndex];
+				auto DsvHandle = DsvHeapMap[0];
 
 				GfxContext.Begin(DirectWindow.Gfx->GfxCommandQueue, DirectWindow.Gfx->GfxResourceHeap.Get());
 
@@ -354,7 +355,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				};
 				GfxContext.CommandList->ResourceBarrier(Barrier.size(), Barrier.data());
 
-				GfxContext.SetTarget(&DirectWindow.Gfx->Viewport, &DirectWindow.Gfx->Rect, &RenderViewHandle, &DepthStencilHandle);
+				GfxContext.SetTarget(&DirectWindow.Gfx->Viewport, &DirectWindow.Gfx->Rect, &RtvHandle, &DsvHandle);
 
 				GfxContext.DrawIndirect(DrawCount, IndirectDrawIndexedCommands);
 
@@ -429,9 +430,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				OcclCullingContext.SetDescriptorTable(1, CmpResourceHeapHandle);
 				OcclCullingContext.SetUnorderedAccessView(2, MeshCommonCullingData.GpuPtr);
 				OcclCullingContext.SetDescriptorTable(3, HiZDepthTextureHandle);
-
-				OcclCullingContext.CommandList->CopyBufferRegion(IndirectDrawCommands.Handle.Get(), DrawCount * sizeof(indirect_draw_command), ZeroBuffer.Handle.Get(), 0, sizeof(u32));
-				OcclCullingContext.CommandList->CopyBufferRegion(IndirectDrawIndexedCommands.Handle.Get(), DrawCount * sizeof(indirect_draw_indexed_command), ZeroBuffer.Handle.Get(), 0, sizeof(u32));
 
 				D3D12_RESOURCE_BARRIER Barrier[] = 
 				{

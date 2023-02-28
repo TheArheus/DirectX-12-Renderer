@@ -61,18 +61,13 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 
 	{
-		D3D12_DESCRIPTOR_HEAP_DESC RtvHeapDesc = {};
-		RtvHeapDesc.NumDescriptors = 2;
-		RtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-		RtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-		Device->CreateDescriptorHeap(&RtvHeapDesc, IID_PPV_ARGS(&RtvHeap));
-		RtvSize = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-		D3D12_DESCRIPTOR_HEAP_DESC DsvHeapDesc = {};
-		DsvHeapDesc.NumDescriptors = 1;
-		DsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-		DsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-		Device->CreateDescriptorHeap(&DsvHeapDesc, IID_PPV_ARGS(&DsvHeap));
+		RtvHeap.Init(Device.Get(), 2, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		DsvHeap.Init(Device.Get(), 1, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+		ResourceHeap.Init(Device.Get(), 128, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE);
+		heap_alloc RtvHeapMap = RtvHeap.Allocate(2);
+		heap_alloc DsvHeapMap = DsvHeap.Allocate(1);
+		RtvHeap.Reset();
+		DsvHeap.Reset();
 
 		D3D12_DESCRIPTOR_HEAP_DESC ResourceHeapDesc = {};
 		ResourceHeapDesc.NumDescriptors = 64;
@@ -85,14 +80,12 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&CmpResourceHeap));
 		ResourceHeapIncrement = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-		CD3DX12_CPU_DESCRIPTOR_HANDLE RtvHeapHandle(RtvHeap->GetCPUDescriptorHandleForHeapStart());
 		for (u32 Idx = 0;
 			Idx < 2;
 			++Idx)
 		{
 			SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx].Handle));
-			Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapHandle);
-			RtvHeapHandle.Offset(1, RtvSize);
+			Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapMap.GetNextCpuPtr());
 		}
 
 		D3D12_RESOURCE_DESC DepthStencilDesc = {};
@@ -114,7 +107,7 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
 
-		Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
+		Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeapMap.GetNextCpuPtr());
 	}
 };
 
@@ -226,6 +219,11 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	Fence.Flush(GfxCommandQueue);
 	ID3D12GraphicsCommandList* CommandList = GfxCommandQueue.AllocateCommandList();
 
+	heap_alloc RtvHeapMap = RtvHeap.Allocate(2);
+	heap_alloc DsvHeapMap = DsvHeap.Allocate(1);
+	RtvHeap.Reset();
+	DsvHeap.Reset();
+
 	Viewport.Width  = (r32)NewWidth;
 	Viewport.Height = (r32)NewHeight;
 	Rect = { 0, 0, (LONG)NewWidth, (LONG)NewHeight };
@@ -244,14 +242,12 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	SwapChain->ResizeBuffers(2, NewWidth, NewHeight, BackBufferFormat, (TearingSupport ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0) | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	BackBufferIndex = 0;
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE RtvHeapHandle(RtvHeap->GetCPUDescriptorHandleForHeapStart());
 	for (u32 Idx = 0;
 		Idx < 2;
 		++Idx)
 	{
 		SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx].Handle));
-		Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapHandle);
-		RtvHeapHandle.Offset(1, RtvSize);
+		Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapMap.GetNextCpuPtr());
 	}
 
 	D3D12_RESOURCE_DESC DepthStencilDesc = {};
@@ -273,7 +269,7 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 	Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
 
-	Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeap->GetCPUDescriptorHandleForHeapStart());
+	Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeapMap.GetNextCpuPtr());
 
 	GfxCommandQueue.ExecuteAndRemove(CommandList);
 	Fence.Flush(GfxCommandQueue);

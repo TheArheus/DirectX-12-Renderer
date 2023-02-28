@@ -10,6 +10,7 @@
 #include <array>
 #include <unordered_map>
 #include <initializer_list>
+#include <type_traits>
 
 #include "directx/d3dx12.h"
 #include <d3d12.h>
@@ -46,7 +47,7 @@ constexpr size_t KiB(size_t val) { return val * 1024; };
 constexpr size_t MiB(size_t val) { return KiB(val) * 1024; };
 constexpr size_t GiB(size_t val) { return MiB(val) * 1024; };
 
-template<typename T> struct type_name_res;
+template<typename T> struct type_name;
 
 u32 GetImageMipLevels(u32 Width, u32 Height)
 {

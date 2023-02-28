@@ -115,9 +115,34 @@ private:
 
 struct heap_alloc
 {
+private:
+	u32 Next = 0;
+
+	u32 AllocInc;
+	u32 Range;
+
+public:
+	heap_alloc(D3D12_CPU_DESCRIPTOR_HANDLE NewCpuHandle, D3D12_GPU_DESCRIPTOR_HANDLE NewGpuHandle, u32 NewRange, u32 NewAllocInc) :
+		CpuHandle(NewCpuHandle), GpuHandle(NewGpuHandle), Range(NewRange), AllocInc(NewAllocInc)
+	{}
+
+	D3D12_CPU_DESCRIPTOR_HANDLE GetNextCpuPtr()
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE Result = {CpuHandle.ptr + Next * AllocInc};
+		assert(Next < Range);
+		Next++;
+		return Result;
+	}
+
+	D3D12_CPU_DESCRIPTOR_HANDLE operator[](u32 Idx)
+	{
+		assert(Idx < Range);
+		D3D12_CPU_DESCRIPTOR_HANDLE Result = {CpuHandle.ptr + Idx * AllocInc};
+		return Result;
+	}
+
 	D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle;
 	D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle;
-	u32 Range;
 };
 
 class descriptor_heap
@@ -126,7 +151,14 @@ class descriptor_heap
 	u32 Total;
 
 public:
-	descriptor_heap(ID3D12Device1* Device, u32 NumberOfDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE Type, D3D12_DESCRIPTOR_HEAP_FLAGS Flags)
+	descriptor_heap() = default;
+
+	descriptor_heap(ID3D12Device1* Device, u32 NumberOfDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE Type, D3D12_DESCRIPTOR_HEAP_FLAGS Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE)
+	{
+		Init(Device, NumberOfDescriptors, Type, Flags);
+	}
+
+	void Init(ID3D12Device1* Device, u32 NumberOfDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE Type, D3D12_DESCRIPTOR_HEAP_FLAGS Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE)
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC HeapDesc = {};
 		HeapDesc.NumDescriptors = NumberOfDescriptors;
@@ -147,10 +179,12 @@ public:
 
 	heap_alloc Allocate(u32 Range)
 	{
-	}
+		heap_alloc Result(CpuBegin, GpuBegin, Range, AllocInc);
 
-	void Free(heap_alloc Alloc)
-	{
+		CpuBegin.ptr += AllocInc * Range;
+		GpuBegin.ptr += AllocInc * Range;
+
+		return Result;
 	}
 
 	u32 AllocInc;
@@ -188,8 +222,9 @@ public:
 
 	// NOTE: It is temporary desicion. 
 	// There will be its own allocator for descriptor heaps
-	ComPtr<ID3D12DescriptorHeap> RtvHeap;
-	ComPtr<ID3D12DescriptorHeap> DsvHeap;
+	descriptor_heap RtvHeap;
+	descriptor_heap DsvHeap;
+	descriptor_heap ResourceHeap;
 	ComPtr<ID3D12DescriptorHeap> GfxResourceHeap;
 	ComPtr<ID3D12DescriptorHeap> CmpResourceHeap;
 	u32 RtvSize;

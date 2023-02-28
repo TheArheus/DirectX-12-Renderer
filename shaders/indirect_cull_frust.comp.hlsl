@@ -8,6 +8,8 @@ struct indirect_draw_command
 	uint VertexDraw_DrawInstanceCount;
 	uint VertexDraw_StartVertexLocation;
 	uint VertexDraw_StartInstanceLocation;
+
+	uint DrawCount;
 };
 
 struct indirect_draw_indexed_command
@@ -20,6 +22,8 @@ struct indirect_draw_indexed_command
 	uint IndexDraw_StartIndexLocation;
 	int  IndexDraw_BaseVertexLocation;
 	uint IndexDraw_StartInstanceLocation;
+
+	uint DrawCount;
 };
 
 struct plane
@@ -33,14 +37,10 @@ struct plane
 struct mesh_culling_common_input
 {
 	plane Planes[6];
-	uint DrawCount;
-	uint MeshCount;
-	uint FrustrumCullingEnabled;
-	uint OcclusionCullingEnabled;
+	uint  FrustrumCullingEnabled;
+	uint  OcclusionCullingEnabled;
 	float HiZWidth;
 	float HiZHeight;
-	uint Pad0;
-	uint Pad1;
 	row_major float4x4 Proj;
 };
 
@@ -102,13 +102,11 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex;
 	if(DrawIndex == 0)
 	{
-		IndirectDrawCommands.IncrementCounter();
-		IndirectDrawIndexedCommands.IncrementCounter();
-
 		IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount = 0;
 		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_InstanceCount = 0;
 
-		MeshCullingCommonInput[0].DrawCount = 0;
+		IndirectDrawCommands[MeshIndex].DrawCount = 0;
+		IndirectDrawIndexedCommands[MeshIndex].DrawCount = 0;
 	}
 
 	if(!MeshDrawCommandData[DrawIndex].IsVisible)
@@ -121,47 +119,31 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 	float3 SphereCenter = MeshOffsets[MeshIndex].BoundingSphere.Center.xyz * MeshDrawCommandData[DrawIndex].Scale + MeshDrawCommandData[DrawIndex].Translate.xyz;
 	float SphereRadius = MeshOffsets[MeshIndex].BoundingSphere.Radius * MeshDrawCommandData[DrawIndex].Scale;
 
-	float3 BoxMin = MeshOffsets[MeshIndex].AABB.Min.xyz * MeshDrawCommandData[DrawIndex].Scale + MeshDrawCommandData[DrawIndex].Translate.xyz;
-	float3 BoxMax = MeshOffsets[MeshIndex].AABB.Max.xyz * MeshDrawCommandData[DrawIndex].Scale + MeshDrawCommandData[DrawIndex].Translate.xyz;
-	BoxMin = mul(Proj, float4(BoxMin, 0)).xyz;
-	BoxMax = mul(Proj, float4(BoxMax, 0)).xyz;
-
-	bool IsVisible = true;
+	bool IsVisible = MeshDrawCommandData[DrawIndex].IsVisible;
 	// Frustum Culling
 	if(MeshCullingCommonInput[0].FrustrumCullingEnabled)
 	{
-#if 0
-		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[0].N, SphereCenter) > -SphereRadius);
-		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[1].N, SphereCenter) > -SphereRadius);
-		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[2].N, SphereCenter) > -SphereRadius);
-		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[3].N, SphereCenter) > -SphereRadius);
-		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[4].N, SphereCenter) > -SphereRadius);
-		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[5].N, SphereCenter) > -SphereRadius);
-#else
 		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[0].N, SphereCenter - MeshCullingCommonInput[0].Planes[0].P) > 0);
 		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[1].N, SphereCenter - MeshCullingCommonInput[0].Planes[1].P) > 0);
 		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[2].N, SphereCenter - MeshCullingCommonInput[0].Planes[2].P) > 0);
 		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[3].N, SphereCenter - MeshCullingCommonInput[0].Planes[3].P) > 0);
 		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[4].N, SphereCenter - MeshCullingCommonInput[0].Planes[4].P) > 0);
 		IsVisible = IsVisible && (dot(MeshCullingCommonInput[0].Planes[5].N, SphereCenter - MeshCullingCommonInput[0].Planes[5].P) > 0);
-#endif
 	}
 
 	if(IsVisible)
 	{
 		uint DrawCommandIdx;
-		indirect_draw_command IndirectDrawCommand;
-		indirect_draw_indexed_command IndirectDrawIndexedCommand;
+		InterlockedAdd(IndirectDrawCommands[MeshIndex].DrawCount, 1, DrawCommandIdx);
+		InterlockedAdd(IndirectDrawIndexedCommands[MeshIndex].DrawCount, 1);
 
-		InterlockedAdd(MeshCullingCommonInput[0].DrawCount, 1, DrawCommandIdx);
-
-		IndirectDrawCommands[MeshIndex].BufferPtr = MeshDrawCommandData[DrawIndex].Buffer1;
+		IndirectDrawCommands[MeshIndex].BufferPtr  = MeshDrawCommandData[DrawIndex].Buffer1;
 		IndirectDrawCommands[MeshIndex].BufferPtr1 = MeshDrawCommandData[DrawIndex].Buffer2;
 		IndirectDrawCommands[MeshIndex].VertexDraw_VertexCountPerInstance = MeshOffsets[MeshIndex].VertexCount;
 		IndirectDrawCommands[MeshIndex].VertexDraw_StartVertexLocation = MeshOffsets[MeshIndex].VertexOffset;
 		IndirectDrawCommands[MeshIndex].VertexDraw_StartInstanceLocation = 0;
 
-		IndirectDrawIndexedCommands[MeshIndex].BufferPtr = MeshDrawCommandData[DrawIndex].Buffer1;
+		IndirectDrawIndexedCommands[MeshIndex].BufferPtr  = MeshDrawCommandData[DrawIndex].Buffer1;
 		IndirectDrawIndexedCommands[MeshIndex].BufferPtr1 = MeshDrawCommandData[DrawIndex].Buffer2;
 		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_IndexCountPerInstance = MeshOffsets[MeshIndex].IndexCount;
 		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_StartIndexLocation = MeshOffsets[MeshIndex].IndexOffset;

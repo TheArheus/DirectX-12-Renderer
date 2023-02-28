@@ -228,12 +228,13 @@ struct buffer
 		TempBuffer->Unmap(0, 0);
 	}
 
+	u64  Size;
 	u32  CounterOffset = 0;
 	bool WithCounter   = false;
 
-	D3D12_GPU_VIRTUAL_ADDRESS GpuPtr = 0;
 	ComPtr<ID3D12Resource> Handle;
-	u64 Size;
+	D3D12_GPU_VIRTUAL_ADDRESS GpuPtr = 0;
+	D3D12_CPU_DESCRIPTOR_HANDLE View;
 };
 
 struct texture
@@ -415,10 +416,11 @@ struct texture
 		TempBuffer->Unmap(0, 0);
 	}
 
-	ComPtr<ID3D12Resource> Handle;
 	u64 Width;
 	u64 Height;
 	DXGI_FORMAT Format;
+	ComPtr<ID3D12Resource> Handle;
+	D3D12_CPU_DESCRIPTOR_HANDLE View;
 };
 
 class memory_heap
@@ -489,6 +491,8 @@ public:
 		TotalSize += AlignedSize;
 		return Texture;
 	}
+
+	D3D12_GPU_DESCRIPTOR_HANDLE View;
 
 private:
 	u64 Size = 0;
