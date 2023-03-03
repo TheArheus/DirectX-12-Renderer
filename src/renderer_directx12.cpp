@@ -69,17 +69,6 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		RtvHeap.Reset();
 		DsvHeap.Reset();
 
-		D3D12_DESCRIPTOR_HEAP_DESC ResourceHeapDesc = {};
-		ResourceHeapDesc.NumDescriptors = 64;
-		ResourceHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-		ResourceHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-		Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&GfxResourceHeap));
-		ResourceHeapDesc.NumDescriptors = 64;
-		ResourceHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-		ResourceHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-		Device->CreateDescriptorHeap(&ResourceHeapDesc, IID_PPV_ARGS(&CmpResourceHeap));
-		ResourceHeapIncrement = Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
 		for (u32 Idx = 0;
 			Idx < 2;
 			++Idx)

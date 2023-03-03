@@ -55,11 +55,16 @@ struct swizzle_2d
 	{
 		return vec_t(E[a], E[b]);
 	}
-	template<template<typename T> class vec_c>
+	template<template<typename T> class vec_c1>
 		requires std::is_same_v<typename vec_t::type, u16>
-	operator vec_c<r32>()
+	operator vec_c1<r32>()
 	{
-		return vec_c<r32>(DecodeHalf(E[a]), DecodeHalf(E[b]));
+		return vec_c1<r32>(DecodeHalf(E[a]), DecodeHalf(E[b]));
+	}
+	template<class vec_c2>
+	operator vec_c2()
+	{
+		return vec_c2(E[a], E[b]);
 	}
 };
 
@@ -88,6 +93,11 @@ struct swizzle_3d
 	{
 		return vec_c<r32>(DecodeHalf(E[a]), DecodeHalf(E[b]), DecodeHalf(E[c]));
 	}
+	template<class vec_c2>
+	operator vec_c2()
+	{
+		return vec_c2(E[a], E[b], E[c]);
+	}
 };
 
 template<typename vec_t, unsigned int a, unsigned int b, unsigned int c, unsigned int d>
@@ -115,6 +125,11 @@ struct swizzle_4d
 	operator vec_c<r32>()
 	{
 		return vec_c<r32>(DecodeHalf(E[a]), DecodeHalf(E[b]), DecodeHalf(E[c]), DecodeHalf(E[d]));
+	}
+	template<class vec_c2>
+	operator vec_c2()
+	{
+		return vec_c2(E[a], E[b], E[c], E[d]);
 	}
 };
 
@@ -259,11 +274,6 @@ struct v2
 	bool operator==(const v2& rhs) const
 	{
 		return (this->x == rhs.x) && (this->y == rhs.y);
-	}
-
-	operator v2<u16>()
-	{
-		return v2<r32>(DecodeHalf(x), DecodeHalf(y));
 	}
 
 	r32 Dot(const v2& rhs)
@@ -519,10 +529,14 @@ struct v4
 
 	v4() = default;
 
+	template<typename U>
+	v4(U V) : x(V), y(V), z(V), w(V) {};
 	v4(T V) : x(V), y(V), z(V), w(V) {};
 	v4(v2<T> V) : x(V.x), y(V.y), z(0), w(0) {};
 	v4(v3<T> V) : x(V.x), y(V.y), z(V.z), w(0) {};
 	v4(v3<T> V, T _w) : x(V.x), y(V.y), z(V.z), w(_w) {};
+	template<typename U>
+	v4(U _x, U _y, U _z, U _w) : x(_x), y(_y), z(_z), w(_w) {};
 	v4(T _x, T _y, T _z, T _w) : x(_x), y(_y), z(_z), w(_w) {};
 
 	T& operator[](u32 Idx)
@@ -661,11 +675,6 @@ struct v4
 	bool operator==(const v4& rhs) const
 	{
 		return (this->x == rhs.x) && (this->y == rhs.y) && (this->z && rhs.z) && (this->w && rhs.w);
-	}
-
-	operator v4<u16>()
-	{
-		return v4<r32>(DecodeHalf(x), DecodeHalf(y), DecodeHalf(z), DecodeHalf(w));
 	}
 
 	r32 Dot(const v4& rhs)

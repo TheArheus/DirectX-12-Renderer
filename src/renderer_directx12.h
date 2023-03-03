@@ -141,6 +141,13 @@ public:
 		return Result;
 	}
 
+	D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHandle(u32 Idx)
+	{
+		assert(Idx < Range);
+		D3D12_GPU_DESCRIPTOR_HANDLE Result = {GpuHandle.ptr + Idx * AllocInc};
+		return Result;
+	}
+
 	D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle;
 	D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle;
 };
@@ -225,10 +232,6 @@ public:
 	descriptor_heap RtvHeap;
 	descriptor_heap DsvHeap;
 	descriptor_heap ResourceHeap;
-	ComPtr<ID3D12DescriptorHeap> GfxResourceHeap;
-	ComPtr<ID3D12DescriptorHeap> CmpResourceHeap;
-	u32 RtvSize;
-	u32 ResourceHeapIncrement;
 	texture BackBuffers[2];
 	texture DepthStencilBuffer;
 	int BackBufferIndex = 0;

@@ -126,7 +126,7 @@ Load(const std::string& Path, u32 BoundingGeneration)
 		if(NormalIndices.size() != 0)
 		{
 			vec3 Norm = Normals[NormalIndices[VertexIndex]];
-			Vert.Normal = ((u8(Norm.x*127 + 128) << 24) | (u8(Norm.y*127 + 128) << 16) | (u8(Norm.z*127 + 128) << 8) | 0);
+			Vert.Normal = ((u8(Norm.x*127 + 127) << 24) | (u8(Norm.y*127 + 127) << 16) | (u8(Norm.z*127 + 127) << 8) | 0);
 		} 
 
 		if(UniqueVertices.count(Vert) == 0)
