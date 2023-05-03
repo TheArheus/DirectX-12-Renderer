@@ -7,7 +7,9 @@
 #include <fstream>
 #include <string_view>
 #include <vector>
+#include <map>
 #include <array>
+#include <bitset>
 #include <unordered_map>
 #include <initializer_list>
 #include <type_traits>
@@ -38,6 +40,9 @@ typedef int64_t  s64;
                  
 typedef float    r32;
 typedef double   r64;
+
+typedef uint32_t b32;
+typedef uint64_t b64;
 
 constexpr size_t KB(size_t val) { return val * 1000; };
 constexpr size_t MB(size_t val) { return KB(val) * 1000; };

@@ -44,6 +44,15 @@ struct mesh_culling_common_input
 	row_major float4x4 Proj;
 };
 
+struct material
+{
+	float4 LightEmmit;
+	float  Specular;
+	float  TextureIdx;
+	float  NormalMapIdx;
+	uint   Pad;
+};
+
 struct aabb
 {
 	float4 Min;
@@ -70,6 +79,7 @@ struct mesh_offset
 
 struct mesh_draw_command_data
 {
+	material Mat;
 	float4   Translate;
 	float    Scale;
 	uint64_t Buffer1;
@@ -80,6 +90,7 @@ struct mesh_draw_command_data
 
 struct mesh_draw_command
 {
+	material Mat;
 	float4   Translate;
 	float    Scale;
 	float    Pad0;

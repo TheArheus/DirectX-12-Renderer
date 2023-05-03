@@ -76,6 +76,82 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 				return 0;
 			} break;
 #endif
+			case WM_SYSKEYDOWN:
+			case WM_SYSKEYUP:
+			case WM_KEYDOWN:
+			case WM_KEYUP:
+			{
+				u16 VkCode = LOWORD(wParam);
+				u16 Flags  = HIWORD(lParam);
+				u16 RepeatCount = LOWORD(lParam);
+				if(Message == WM_KEYUP || Message == WM_SYSKEYUP)
+				{
+					int fin = 5;
+				}
+
+				bool IsPressed  = (Message == WM_KEYDOWN || Message == WM_SYSKEYDOWN);
+				bool IsExtended = (Flags & KF_EXTENDED) == KF_EXTENDED;
+				bool WasDown    = (Flags & KF_REPEAT) == KF_REPEAT;
+				bool IsReleased = (Flags & KF_UP) == KF_UP;
+
+				switch(VkCode)
+				{
+					case EC_MENU:
+					case EC_SHIFT:
+					case EC_CONTROL:
+					{
+						VkCode = LOWORD(MapVirtualKeyW(LOBYTE(Flags), MAPVK_VSC_TO_VK_EX));
+					} break;
+				}
+
+				Buttons[VkCode] = {.IsDown = IsPressed, .WasDown = WasDown};
+			} break;
+
+			case WM_MOUSEMOVE:
+			{
+				MouseX = GET_X_LPARAM(lParam);
+				MouseY = GET_Y_LPARAM(lParam);
+			} break;
+
+			case WM_MOUSEWHEEL:
+			{
+				s32 WheelDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+				if(WheelDelta != 0)
+				{
+					WheelDelta = WheelDelta < 0 ? -1 : 1;
+				}
+			} break;
+
+			case WM_LBUTTONDOWN:
+			case WM_MBUTTONDOWN:
+			case WM_RBUTTONDOWN:
+			case WM_LBUTTONUP:
+			case WM_MBUTTONUP:
+			case WM_RBUTTONUP:
+			{
+				bool IsPressed = Message == WM_LBUTTONDOWN || Message == WM_RBUTTONDOWN || Message == WM_MBUTTONDOWN;
+				switch(Message)
+				{
+					case WM_LBUTTONDOWN:
+					case WM_LBUTTONUP:
+					{
+						Buttons[EC_LBUTTON] = {.WasDown = IsPressed};
+					} break;
+
+					case WM_RBUTTONDOWN:
+					case WM_RBUTTONUP:
+					{
+						Buttons[EC_RBUTTON] = {.WasDown = IsPressed};
+					} break;
+
+					case WM_MBUTTONDOWN:
+					case WM_MBUTTONUP:
+					{
+						Buttons[EC_MBUTTON] = {.WasDown = IsPressed};
+					}break;
+				}
+			} break;
+
 			case WM_CLOSE:
 			{
 				PostQuitMessage(0);

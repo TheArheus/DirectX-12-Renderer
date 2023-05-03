@@ -5,7 +5,7 @@
 
 #include <random>
 
-const u32 DrawCount = 1024*50;
+const u32 DrawCount = 1024;
 
 struct indirect_draw_command
 {
@@ -25,6 +25,7 @@ struct indirect_draw_indexed_command
 
 struct mesh_draw_command_input
 {
+	mesh::material Mat;
 	vec4 Translate;
 	float Scale;
 	uint64_t Buffer1;
@@ -35,6 +36,7 @@ struct mesh_draw_command_input
 
 struct mesh_draw_command
 {
+	mesh::material Mat;
 	vec4  Translate;
 	float Scale;
 	float Pad0;
@@ -46,17 +48,26 @@ struct global_world_data
 {
 	mat4 View;
 	mat4 Proj;
+	u32  ColorSourceCount;
+};
+
+struct light_source
+{
+	vec4 Pos;
+	vec4 Col;
 };
 
 struct mesh_comp_culling_common_input
 {
 	plane CullingPlanes[6];
-	u32 FrustrumCullingEnabled;
-	u32 OcclusionCullingEnabled;
+	u32   FrustrumCullingEnabled;
+	u32   OcclusionCullingEnabled;
 	float HiZWidth;
 	float HiZHeight;
-	mat4 Proj;
+	mat4  Proj;
 };
+
+std::vector<light_source> Lights;
 
 class geometry_instance
 {
@@ -72,11 +83,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	window DirectWindow(1240, 720, "3D Renderer");
 	DirectWindow.InitGraphics();
 
-	srand(512);
+	vec3 CameraPos{}, ViewDir(0, 0, 1);
+
+	srand(128);
 	double TargetFrameRate = 1.0 / 60 * 1000.0; // Frames Per Milliseconds
 
-	mesh Cube("..\\assets\\cube.obj");
-	mesh Geometries({"..\\assets\\kitten.obj"}, generate_aabb | generate_sphere);
+	mesh Geometries({"..\\assets\\cube.obj"}, generate_aabb | generate_sphere);
 	std::vector<mesh_draw_command_input> MeshDrawCommandData(DrawCount);
 	std::vector<indirect_draw_command> IndirectDrawCommandVector(DrawCount);
 	std::vector<indirect_draw_indexed_command> IndirectDrawIndexedCommandVector(DrawCount);
@@ -94,8 +106,8 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	buffer WorldUpdateBuffer(DirectWindow.Gfx, (void*)&WorldUpdate, sizeof(global_world_data), false, 256);
 
 	mesh_comp_culling_common_input MeshCompCullingCommonData = {};
-	MeshCompCullingCommonData.FrustrumCullingEnabled = true;
-	MeshCompCullingCommonData.OcclusionCullingEnabled = true;
+	MeshCompCullingCommonData.FrustrumCullingEnabled = false;
+	MeshCompCullingCommonData.OcclusionCullingEnabled = false;
 	MeshCompCullingCommonData.Proj = WorldUpdate.Proj;
 	GeneratePlanes(MeshCompCullingCommonData.CullingPlanes, WorldUpdate.Proj, 1);
 
@@ -103,7 +115,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	buffer MeshDrawCommandDataBuffer(DirectWindow.Gfx, sizeof(mesh_draw_command_input) * DrawCount, false, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 	buffer MeshDrawCommandBuffer(DirectWindow.Gfx, sizeof(mesh_draw_command) * DrawCount, false, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
-	u32 SceneRadius = 10;
+	u32 SceneRadius = 5;
 	for(u32 DataIdx = 0;
 		DataIdx < DrawCount;
 		DataIdx++)
@@ -114,7 +126,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		CommandData.Buffer2 = WorldUpdateBuffer.GpuPtr;
 
 		CommandData.IsVisible = true;
-		CommandData.Scale = 1.0f / 2;
+		CommandData.Scale = 1.0f / 10;
 		CommandData.Translate = vec4((float(rand()) / RAND_MAX) * 2 * SceneRadius - SceneRadius, 
 									 (float(rand()) / RAND_MAX) * 2 * SceneRadius - SceneRadius, 
 									 (float(rand()) / RAND_MAX) * 2 * SceneRadius - SceneRadius, 0.0f);
@@ -150,12 +162,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	GfxSrvDesc0.Buffer.NumElements = DrawCount;
 	GfxSrvDesc0.Buffer.StructureByteStride = sizeof(indirect_draw_indexed_command);
 	GfxSrvDesc0.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateShaderResourceView(IndirectDrawIndexedCommands.Handle.Get(), &GfxSrvDesc0, GfxDescriptorHeapHandle.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateShaderResourceView(IndirectDrawIndexedCommands.Handle.Get(), &GfxSrvDesc0, GfxDescriptorHeapHandle.GetNextCpuHandle());
 
 	D3D12_CONSTANT_BUFFER_VIEW_DESC GfxCbvDesc0 = {};
 	GfxCbvDesc0.BufferLocation = WorldUpdateBuffer.GpuPtr;
 	GfxCbvDesc0.SizeInBytes = WorldUpdateBuffer.Size;
-	DirectWindow.Gfx->Device->CreateConstantBufferView(&GfxCbvDesc0, GfxDescriptorHeapHandle.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateConstantBufferView(&GfxCbvDesc0, GfxDescriptorHeapHandle.GetNextCpuHandle());
 
 	// Compute Resources
 	heap_alloc MeshOffsetsTable = DirectWindow.Gfx->ResourceHeap.Allocate(1);
@@ -167,7 +179,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpSrvDesc0.Buffer.NumElements = Geometries.Offsets.size();
 	CmpSrvDesc0.Buffer.StructureByteStride = sizeof(mesh::offset);
 	CmpSrvDesc0.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateShaderResourceView(GeometryOffsets.Handle.Get(), &CmpSrvDesc0, MeshOffsetsTable.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateShaderResourceView(GeometryOffsets.Handle.Get(), &CmpSrvDesc0, MeshOffsetsTable.GetNextCpuHandle());
 
 	heap_alloc IndirectCommandsDataTable = DirectWindow.Gfx->ResourceHeap.Allocate(4);
 	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpSrvDesc1 = {};
@@ -177,7 +189,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpSrvDesc1.Buffer.NumElements = MeshDrawCommandData.size();
 	CmpSrvDesc1.Buffer.StructureByteStride = sizeof(mesh_draw_command_input);
 	CmpSrvDesc1.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshDrawCommandDataBuffer.Handle.Get(), nullptr, &CmpSrvDesc1, IndirectCommandsDataTable.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshDrawCommandDataBuffer.Handle.Get(), nullptr, &CmpSrvDesc1, IndirectCommandsDataTable.GetNextCpuHandle());
 
 	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc0 = {};
 	CmpUavDesc0.Format = DXGI_FORMAT_UNKNOWN;
@@ -187,7 +199,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpUavDesc0.Buffer.StructureByteStride = sizeof(indirect_draw_command);
 	CmpUavDesc0.Buffer.CounterOffsetInBytes = IndirectDrawCommands.CounterOffset;
 	CmpUavDesc0.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawCommands.Handle.Get(), IndirectDrawCommands.Handle.Get(), &CmpUavDesc0, IndirectCommandsDataTable.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawCommands.Handle.Get(), IndirectDrawCommands.Handle.Get(), &CmpUavDesc0, IndirectCommandsDataTable.GetNextCpuHandle());
 
 	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc1 = {};
 	CmpUavDesc1.Format = DXGI_FORMAT_UNKNOWN;
@@ -197,7 +209,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpUavDesc1.Buffer.StructureByteStride = sizeof(indirect_draw_indexed_command);
 	CmpUavDesc1.Buffer.CounterOffsetInBytes = IndirectDrawIndexedCommands.CounterOffset;
 	CmpUavDesc1.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawIndexedCommands.Handle.Get(), IndirectDrawIndexedCommands.Handle.Get(), &CmpUavDesc1, IndirectCommandsDataTable.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawIndexedCommands.Handle.Get(), IndirectDrawIndexedCommands.Handle.Get(), &CmpUavDesc1, IndirectCommandsDataTable.GetNextCpuHandle());
 
 	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc2 = {};
 	CmpUavDesc2.Format = DXGI_FORMAT_UNKNOWN;
@@ -206,7 +218,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpUavDesc2.Buffer.NumElements = DrawCount;
 	CmpUavDesc2.Buffer.StructureByteStride = sizeof(mesh_draw_command);
 	CmpUavDesc2.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshDrawCommandBuffer.Handle.Get(), nullptr, &CmpUavDesc2, IndirectCommandsDataTable.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshDrawCommandBuffer.Handle.Get(), nullptr, &CmpUavDesc2, IndirectCommandsDataTable.GetNextCpuHandle());
 
 	heap_alloc CullingCommonInputTable = DirectWindow.Gfx->ResourceHeap.Allocate(1);
 	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc3 = {};
@@ -216,7 +228,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	CmpUavDesc3.Buffer.NumElements = 1;
 	CmpUavDesc3.Buffer.StructureByteStride = sizeof(mesh_comp_culling_common_input);
 	CmpUavDesc3.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshCommonCullingData.Handle.Get(), nullptr, &CmpUavDesc3, CullingCommonInputTable.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshCommonCullingData.Handle.Get(), nullptr, &CmpUavDesc3, CullingCommonInputTable.GetNextCpuHandle());
 
 	heap_alloc DepthBufferTable = DirectWindow.Gfx->ResourceHeap.Allocate(1);
 	D3D12_SHADER_RESOURCE_VIEW_DESC DepthTextureSRVDesc = {};
@@ -226,7 +238,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	DepthTextureSRVDesc.Texture2D.MipLevels = 1;
 	DepthTextureSRVDesc.Texture2D.MostDetailedMip = 0;
 	DepthTextureSRVDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-	DirectWindow.Gfx->Device->CreateShaderResourceView(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), &DepthTextureSRVDesc, DepthBufferTable.GetNextCpuPtr());
+	DirectWindow.Gfx->Device->CreateShaderResourceView(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), &DepthTextureSRVDesc, DepthBufferTable.GetNextCpuHandle());
 
 	heap_alloc HiZInputTable  = DirectWindow.Gfx->ResourceHeap.Allocate(DepthMipLevel);
 	heap_alloc HiZOutputTable = DirectWindow.Gfx->ResourceHeap.Allocate(DepthMipLevel);
@@ -235,7 +247,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		DepthIdx < DepthMipLevel;
 		++DepthIdx)
 	{
-		DirectWindow.Gfx->Device->CreateShaderResourceView(DepthTextures[DepthIdx].Handle.Get(), &DepthTextureSRVDesc, HiZInputTable.GetNextCpuPtr());
+		DirectWindow.Gfx->Device->CreateShaderResourceView(DepthTextures[DepthIdx].Handle.Get(), &DepthTextureSRVDesc, HiZInputTable.GetNextCpuHandle());
 	}
 
 	D3D12_UNORDERED_ACCESS_VIEW_DESC DepthTextureUAVDesc = {};
@@ -247,7 +259,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		++DepthIdx)
 	{
 		DepthTextureUAVDesc.Texture2D.MipSlice = 0;
-		DirectWindow.Gfx->Device->CreateUnorderedAccessView(DepthTextures[DepthIdx].Handle.Get(), nullptr, &DepthTextureUAVDesc, HiZOutputTable.GetNextCpuPtr());
+		DirectWindow.Gfx->Device->CreateUnorderedAccessView(DepthTextures[DepthIdx].Handle.Get(), nullptr, &DepthTextureUAVDesc, HiZOutputTable.GetNextCpuHandle());
 	}
 
 	shader_input GfxRootSignature;
@@ -303,6 +315,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	{
 		auto Result = DirectWindow.ProcessMessages();
 		if(Result) return *Result;
+
+		WorldUpdate = {LookAt(CameraPos, CameraPos + ViewDir, vec3(0, 1, 0)), PerspectiveInfFarZ(Pi<r64>/3, 1240, 720, 1)};
+		WorldUpdateBuffer.Update(DirectWindow.Gfx, (void*)&WorldUpdate);
 
 		if(!DirectWindow.IsGfxPaused)
 		{
@@ -446,8 +461,56 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			DirectWindow.Gfx->BackBufferIndex = DirectWindow.Gfx->SwapChain->GetCurrentBackBufferIndex();
 		}
 
+
 		double TimeEnd = window::GetTimestamp();
 		double TimeElapsed = (TimeEnd - TimeLast);
+
+		vec3 Disp;
+		if(DirectWindow.Buttons[EC_R].IsDown)
+		{
+			Disp = vec3(0,  0.1, 0);
+			CameraPos += Disp;
+		}
+		if(DirectWindow.Buttons[EC_F].IsDown)
+		{
+			Disp = vec3(0, -0.1, 0);
+			CameraPos += Disp;
+		}
+		if(DirectWindow.Buttons[EC_W].IsDown)
+		{
+			Disp = ViewDir * 0.1;
+			CameraPos -= Disp;
+		}
+		if(DirectWindow.Buttons[EC_S].IsDown)
+		{
+			Disp = ViewDir * 0.1;
+			CameraPos += Disp;
+		}
+		if(DirectWindow.Buttons[EC_A].IsDown || DirectWindow.Buttons[EC_LEFT].IsDown)
+		{
+			quat ViewDirQuat(ViewDir, 0);
+			quat RotQuat(0.01, vec3(0, 1, 0));
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		if(DirectWindow.Buttons[EC_D].IsDown || DirectWindow.Buttons[EC_RIGHT].IsDown)
+		{
+			quat ViewDirQuat(ViewDir, 0);
+			quat RotQuat(-0.01, vec3(0, 1, 0));
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		// NOTE: This works not as expected
+		if(DirectWindow.Buttons[EC_UP].IsDown)
+		{
+			quat ViewDirQuat(ViewDir, 0);
+			quat RotQuat(0.01, vec3(1, 0, 0));
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
+		if(DirectWindow.Buttons[EC_DOWN].IsDown)
+		{
+			quat ViewDirQuat(ViewDir, 0);
+			quat RotQuat(-0.01, vec3(1, 0, 0));
+			ViewDir = (RotQuat * ViewDirQuat * RotQuat.Inverse()).q;
+		}
 
 #if 0
 		if(TimeElapsed < TargetFrameRate)

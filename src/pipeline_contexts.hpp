@@ -42,7 +42,7 @@ public:
 
 		CommandList->OMSetRenderTargets(1, RenderTarget, true, DepthTarget);
 
-		float ClearColor[] = { 0.2f, 0.2f, 0.2f, 1.0f };
+		float ClearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		CommandList->ClearRenderTargetView(*RenderTarget, ClearColor, 0, nullptr);
 		CommandList->ClearDepthStencilView(*DepthTarget, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
 	}

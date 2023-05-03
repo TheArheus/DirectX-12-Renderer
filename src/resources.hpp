@@ -35,12 +35,14 @@ struct buffer
 	template<class T>
 	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, 
 		   u64 Offset, void* Data, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
-		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize), WithCounter(NewWithCounter)
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : WithCounter(NewWithCounter)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 
-		u64 BufferSize = Alignment == 0 ? Size + WithCounter * sizeof(u32) : AlignUp(Size + WithCounter * sizeof(u32), Alignment);
+		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
+		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
+						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
 		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
@@ -70,12 +72,14 @@ struct buffer
 	template<class T>
 	buffer(std::unique_ptr<T>& App, ID3D12Heap1* Heap, 
 		   u64 Offset, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
-		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize), WithCounter(NewWithCounter)
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : WithCounter(NewWithCounter)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 
-		u64 BufferSize = Alignment == 0 ? Size + WithCounter * sizeof(u32) : AlignUp(Size + WithCounter * sizeof(u32), Alignment);
+		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
+		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
+						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
 		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
@@ -104,12 +108,14 @@ struct buffer
 	template<class T>
 	buffer(std::unique_ptr<T>& App, 
 		   void* Data, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
-		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize), WithCounter(NewWithCounter)
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : WithCounter(NewWithCounter)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 
-		u64 BufferSize = Alignment == 0 ? Size + WithCounter * sizeof(u32) : AlignUp(Size + WithCounter * sizeof(u32), Alignment);
+		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
+		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
+						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
 		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
@@ -139,12 +145,14 @@ struct buffer
 	template<class T>
 	buffer(std::unique_ptr<T>& App, 
 		   u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
-		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : Size(NewSize), WithCounter(NewWithCounter)
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : WithCounter(NewWithCounter)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
 		ComPtr<ID3D12Device6> Device;
 
-		u64 BufferSize = Alignment == 0 ? Size + WithCounter * sizeof(u32) : AlignUp(Size + WithCounter * sizeof(u32), Alignment);
+		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
+		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
+						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
 		Size = BufferSize;
 		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);

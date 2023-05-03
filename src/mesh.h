@@ -49,7 +49,6 @@ struct hash<vertex>
 
 struct mesh
 {
-
 	struct sphere
 	{
 		vec4 Center;
@@ -60,6 +59,15 @@ struct mesh
 	{
 		vec4 Min;
 		vec4 Max;
+	};
+
+	struct material
+	{
+		vec4 LightEmmit;
+		r32  Specular;
+		u32  TextureIdx;
+		u32  NormalMapIdx;
+		u32  Pad0;
 	};
 
 	struct offset

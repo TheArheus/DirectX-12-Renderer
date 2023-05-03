@@ -26,6 +26,15 @@ struct indirect_draw_indexed_command
 	uint DrawCount;
 };
 
+struct material
+{
+	float4 LightEmmit;
+	float  Specular;
+	float  TextureIdx;
+	float  NormalMapIdx;
+	uint   Pad;
+};
+
 struct plane
 {
 	float3 P;
@@ -70,6 +79,7 @@ struct mesh_offset
 
 struct mesh_draw_command_data
 {
+	material Mat;
 	float4   Translate;
 	float    Scale;
 	uint64_t Buffer1;
@@ -127,7 +137,7 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 		float4 Texel = HiZDepthTextures[Lod].Gather(DepthSampler, BoxDims.xy * 0.5);
 
 		float ObjDepth = ProjBoxMax.z;
-		IsNotOcclCulled = (ObjDepth >= (min(min(Texel.x, Texel.y), min(Texel.z, Texel.w))) - 0.01);
+		IsNotOcclCulled = (ObjDepth >= (min(min(Texel.x, Texel.y), min(Texel.z, Texel.w)) - 0.01));
 	}
 
 	MeshDrawCommandData[DrawIndex].IsVisible = IsNotOcclCulled && IsVisible;

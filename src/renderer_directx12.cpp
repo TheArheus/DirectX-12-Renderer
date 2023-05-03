@@ -26,17 +26,31 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		GetDevice(&Device);
 	}
 
-	if(SUCCEEDED(Factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &TearingSupport, sizeof(TearingSupport))))
-	{
-		TearingSupport = true;
-	}
+	Factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &TearingSupport, sizeof(TearingSupport));
+
+	D3D12_FEATURE_DATA_FORMAT_SUPPORT DataFormatSupport = {BackBufferFormat, D3D12_FORMAT_SUPPORT1_NONE, D3D12_FORMAT_SUPPORT2_NONE};
+	Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &DataFormatSupport, sizeof(DataFormatSupport));
+
+	u32 RenderFormatRequired = D3D12_FORMAT_SUPPORT1_RENDER_TARGET | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RESOLVE | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET;
+	bool RenderMultisampleSupport = (DataFormatSupport.Support1 & RenderFormatRequired) == RenderFormatRequired;
+	u32 DepthFormatRequired = D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL | D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET;
+	bool DepthMultisampleSupport = (DataFormatSupport.Support1 & DepthFormatRequired) == DepthFormatRequired;
 
 	D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS MsQualityLevels = {};
+	MsQualityLevels.Flags = D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE;
 	MsQualityLevels.Format = BackBufferFormat;
-	MsQualityLevels.SampleCount = 4;
-	Device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &MsQualityLevels, sizeof(MsQualityLevels));
+	for (MsaaQuality = 4;
+		 MsaaQuality > 1;
+		 MsaaQuality--)
+	{
+		MsQualityLevels.SampleCount = MsaaQuality;
+		if (FAILED(Device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &MsQualityLevels, sizeof(MsQualityLevels)))) continue;
+		if (MsQualityLevels.NumQualityLevels > 0) break;
+	}
+	
 	MsaaQuality = MsQualityLevels.NumQualityLevels;
-	if (MsaaQuality < 2) MsaaState = false;
+	if (MsaaQuality >= 2) MsaaState = true;
+	if (MsaaQuality < 2) RenderMultisampleSupport = false;
 
 	GfxCommandQueue.Init(Device.Get(), D3D12_COMMAND_LIST_TYPE_DIRECT);
 	CmpCommandQueue.Init(Device.Get(), D3D12_COMMAND_LIST_TYPE_COMPUTE);
@@ -52,8 +66,8 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		SwapChainDesc.Format = BackBufferFormat;
 		SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 		SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-		SwapChainDesc.SampleDesc.Count = MsaaState ? 4 : 1;
-		SwapChainDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
+		SwapChainDesc.SampleDesc.Count = 1;
+		SwapChainDesc.SampleDesc.Quality = 0;
 		Factory->CreateSwapChainForHwnd(GfxCommandQueue.Handle.Get(), Window, &SwapChainDesc, nullptr, nullptr, _SwapChain.GetAddressOf());
 		_SwapChain.As(&SwapChain);
 	}
@@ -69,12 +83,36 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		RtvHeap.Reset();
 		DsvHeap.Reset();
 
+		D3D12_RESOURCE_DESC RenderTargetDesc = {};
+		RenderTargetDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		RenderTargetDesc.Width = ClientWidth;
+		RenderTargetDesc.Height = ClientHeight;
+		RenderTargetDesc.DepthOrArraySize = 1;
+		RenderTargetDesc.MipLevels = 1;
+		RenderTargetDesc.Format = BackBufferFormat;
+		RenderTargetDesc.SampleDesc.Count = RenderMultisampleSupport ? MsaaQuality : 1;
+		RenderTargetDesc.SampleDesc.Quality = RenderMultisampleSupport ? (MsaaQuality - 1) : 0;
+		RenderTargetDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		RenderTargetDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+		float RenderTargetClearColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+		D3D12_CLEAR_VALUE Clear = {};
+		Clear.Format = BackBufferFormat;
+		memcpy(Clear.Color, RenderTargetClearColor, sizeof(float)*4);
+		auto RenderTargetHeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		//Device->CreateCommittedResource(&RenderTargetHeapProp, D3D12_HEAP_FLAG_NONE, &RenderTargetDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&BackBuffers[0].Handle));
+		//Device->CreateCommittedResource(&RenderTargetHeapProp, D3D12_HEAP_FLAG_NONE, &RenderTargetDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&BackBuffers[1].Handle));
+
+		D3D12_RENDER_TARGET_VIEW_DESC RenderTargetViewDesc = {};
+		RenderTargetViewDesc.Format = BackBufferFormat;
+		RenderTargetViewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+
 		for (u32 Idx = 0;
 			Idx < 2;
 			++Idx)
 		{
 			SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx].Handle));
-			Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapMap.GetNextCpuPtr());
+			Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), &RenderTargetViewDesc, RtvHeapMap.GetNextCpuHandle());
 		}
 
 		D3D12_RESOURCE_DESC DepthStencilDesc = {};
@@ -84,19 +122,18 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 		DepthStencilDesc.DepthOrArraySize = 1;
 		DepthStencilDesc.MipLevels = 1;
 		DepthStencilDesc.Format = DepthBufferFormat;
-		DepthStencilDesc.SampleDesc.Count = MsaaState ? 4 : 1;
-		DepthStencilDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
+		DepthStencilDesc.SampleDesc.Count = DepthMultisampleSupport ? MsaaQuality : 1;
+		DepthStencilDesc.SampleDesc.Quality = DepthMultisampleSupport ? (MsaaQuality - 1) : 0;
 		DepthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 		DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
-		D3D12_CLEAR_VALUE Clear = {};
 		Clear.Format = DepthBufferFormat;
 		Clear.DepthStencil.Depth = 0.0f;
 		Clear.DepthStencil.Stencil = 0;
-		auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
+		auto DepthHeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		Device->CreateCommittedResource(&DepthHeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
 
-		Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeapMap.GetNextCpuPtr());
+		Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeapMap.GetNextCpuHandle());
 	}
 };
 
@@ -118,8 +155,8 @@ CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, std::initializer_l
 	RasterDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
 	RasterDesc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
 	RasterDesc.DepthClipEnable = true;
-	RasterDesc.MultisampleEnable = false;
-	RasterDesc.AntialiasedLineEnable = false;
+	RasterDesc.MultisampleEnable = MsaaState;
+	RasterDesc.AntialiasedLineEnable = MsaaState;
 	RasterDesc.ForcedSampleCount = 0;
 	RasterDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
@@ -176,7 +213,7 @@ CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, std::initializer_l
 	PipelineDesc.SampleMask = UINT_MAX;
 	PipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	PipelineDesc.NumRenderTargets = 1;
-	PipelineDesc.SampleDesc.Count = MsaaState ? 4 : 1;
+	PipelineDesc.SampleDesc.Count = MsaaState ? MsaaQuality : 1;
 	PipelineDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
 	PipelineDesc.RTVFormats[0] = BackBufferFormat;
 	PipelineDesc.DSVFormat = DepthBufferFormat;
@@ -236,7 +273,7 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 		++Idx)
 	{
 		SwapChain->GetBuffer(Idx, IID_PPV_ARGS(&BackBuffers[Idx].Handle));
-		Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapMap.GetNextCpuPtr());
+		Device->CreateRenderTargetView(BackBuffers[Idx].Handle.Get(), nullptr, RtvHeapMap.GetNextCpuHandle());
 	}
 
 	D3D12_RESOURCE_DESC DepthStencilDesc = {};
@@ -246,7 +283,7 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	DepthStencilDesc.DepthOrArraySize = 1;
 	DepthStencilDesc.MipLevels = 1;
 	DepthStencilDesc.Format = DepthBufferFormat;
-	DepthStencilDesc.SampleDesc.Count = MsaaState ? 4 : 1;
+	DepthStencilDesc.SampleDesc.Count = MsaaState ? MsaaQuality : 1;
 	DepthStencilDesc.SampleDesc.Quality = MsaaState ? (MsaaQuality - 1) : 0;
 	DepthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	DepthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
@@ -258,48 +295,9 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	auto HeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 	Device->CreateCommittedResource(&HeapProp, D3D12_HEAP_FLAG_NONE, &DepthStencilDesc, D3D12_RESOURCE_STATE_COMMON, &Clear, IID_PPV_ARGS(&DepthStencilBuffer.Handle));
 
-	Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeapMap.GetNextCpuPtr());
+	Device->CreateDepthStencilView(DepthStencilBuffer.Handle.Get(), nullptr, DsvHeapMap.GetNextCpuHandle());
 
 	GfxCommandQueue.ExecuteAndRemove(CommandList);
 	Fence.Flush(GfxCommandQueue);
 }
-
-#if 0
-void renderer_backend::
-PushVertexData(buffer* VertexBuffer, std::vector<mesh::offset>& Offsets)
-{
-	vertex_buffer_view VertexBufferView = {};
-	for(const mesh::offset& Offset : Offsets)
-	{
-		VertexBufferView.VertexBegin = Offset.VertexOffset;
-		VertexBufferView.VertexCount = Offset.VertexCount;
-		VertexBufferView.Handle = {VertexBuffer->GpuPtr, static_cast<u32>(VertexBuffer->Size), sizeof(vertex)};
-		VertexViews.push_back(VertexBufferView);
-	}
-}
-
-void renderer_backend::
-PushIndexedVertexData(buffer* VertexBuffer, buffer* IndexBuffer, std::vector<mesh::offset>& Offsets)
-{
-	vertex_buffer_view VertexBufferView = {};
-	index_buffer_view IndexBufferView = {};
-	for(const mesh::offset& Offset : Offsets)
-	{
-		VertexBufferView.VertexBegin = Offset.VertexOffset;
-		VertexBufferView.VertexCount = Offset.VertexCount;
-		VertexBufferView.Handle = {VertexBuffer->GpuPtr, static_cast<u32>(VertexBuffer->Size), sizeof(vertex)};
-
-		IndexBufferView.IndexBegin = Offset.IndexOffset;
-		IndexBufferView.IndexCount = Offset.IndexCount;
-		IndexBufferView.Handle = {IndexBuffer->GpuPtr, static_cast<u32>(IndexBuffer->Size), DXGI_FORMAT_R32_UINT};
-
-		IndexedVertexViews.push_back(std::make_pair(VertexBufferView, IndexBufferView));
-	}
-}
-
-void renderer_backend::
-DrawIndexed()
-{
-}
-#endif
 

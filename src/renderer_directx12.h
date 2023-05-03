@@ -126,7 +126,7 @@ public:
 		CpuHandle(NewCpuHandle), GpuHandle(NewGpuHandle), Range(NewRange), AllocInc(NewAllocInc)
 	{}
 
-	D3D12_CPU_DESCRIPTOR_HANDLE GetNextCpuPtr()
+	D3D12_CPU_DESCRIPTOR_HANDLE GetNextCpuHandle()
 	{
 		D3D12_CPU_DESCRIPTOR_HANDLE Result = {CpuHandle.ptr + Next * AllocInc};
 		assert(Next < Range);
@@ -206,12 +206,12 @@ public:
 
 class renderer_backend 
 {
-	u32 MsaaQuality;
-	bool MsaaState = true;
-	bool TearingSupport = false;
+	u32  MsaaQuality;
+	b32  TearingSupport = false;
+	bool MsaaState = false;
 	bool UseWarp = false;
 
-	const DXGI_FORMAT BackBufferFormat  = DXGI_FORMAT_B8G8R8A8_UNORM;
+	const DXGI_FORMAT BackBufferFormat  = DXGI_FORMAT_R8G8B8A8_UNORM;
     const DXGI_FORMAT DepthBufferFormat = DXGI_FORMAT_D32_FLOAT;
 
 	ComPtr<IDXGIFactory6> Factory;
