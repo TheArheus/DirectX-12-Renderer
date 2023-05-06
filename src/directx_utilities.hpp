@@ -17,6 +17,11 @@ void GetDevice(ID3D12Device6** DeviceResult, bool HighPerformance = true)
 		DXGI_ADAPTER_DESC1 Desc;
 		pAdapter->GetDesc1(&Desc);
 
+		if (Desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+		{
+			continue;
+		}
+
 		if(SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device6), nullptr)))
 		{
 			break;

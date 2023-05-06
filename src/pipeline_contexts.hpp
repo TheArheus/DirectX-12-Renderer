@@ -80,24 +80,27 @@ public:
 		CommandList->ExecuteIndirect(IndirectInputSignature.Handle.Get(), ObjectDrawCount, IndirectCommands.Handle.Get(), 0, IndirectCommands.Handle.Get(), IndirectCommands.CounterOffset);
 	}
 
-	void SetDescriptorTable(u32 Idx, D3D12_GPU_DESCRIPTOR_HANDLE Handle)
+	void SetDescriptorTable(u32 Idx, heap_alloc Heap, u32 StartFrom = 0)
 	{
-		CommandList->SetGraphicsRootDescriptorTable(Idx, Handle);
+		CommandList->SetGraphicsRootDescriptorTable(Idx, Heap.GetGpuHandle(StartFrom));
 	}
 
-	void SetShaderResourceView(u32 Idx, D3D12_GPU_VIRTUAL_ADDRESS GpuPtr)
+	template<typename T>
+	void SetShaderResourceView(u32 Idx, const T& Buffer)
 	{
-		CommandList->SetGraphicsRootShaderResourceView(Idx, GpuPtr);
+		CommandList->SetGraphicsRootShaderResourceView(Idx, Buffer.GpuPtr);
 	}
 
-	void SetConstantBufferView(u32 Idx, D3D12_GPU_VIRTUAL_ADDRESS GpuPtr)
+	template<typename T>
+	void SetConstantBufferView(u32 Idx, const T& Buffer)
 	{
-		CommandList->SetGraphicsRootConstantBufferView(Idx, GpuPtr);
+		CommandList->SetGraphicsRootConstantBufferView(Idx, Buffer.GpuPtr);
 	}
 
-	void SetUnorderedAccessView(u32 Idx, D3D12_GPU_VIRTUAL_ADDRESS GpuPtr)
+	template<typename T>
+	void SetUnorderedAccessView(u32 Idx, const T& Buffer)
 	{
-		CommandList->SetGraphicsRootUnorderedAccessView(Idx, GpuPtr);
+		CommandList->SetGraphicsRootUnorderedAccessView(Idx, Buffer.GpuPtr);
 	}
 
 	ID3D12GraphicsCommandList* CommandList;
@@ -152,24 +155,27 @@ public:
 		CommandList->Dispatch((X + 31) / 32, (Y + 31) / 32, (Z + 31) / 32);
 	}
 
-	void SetDescriptorTable(u32 Idx, D3D12_GPU_DESCRIPTOR_HANDLE Handle)
+	void SetDescriptorTable(u32 Idx, heap_alloc Heap, u32 StartFrom = 0)
 	{
-		CommandList->SetComputeRootDescriptorTable(Idx, Handle);
+		CommandList->SetComputeRootDescriptorTable(Idx, Heap.GetGpuHandle(StartFrom));
 	}
 
-	void SetShaderResourceView(u32 Idx, D3D12_GPU_VIRTUAL_ADDRESS GpuPtr)
+	template<typename T>
+	void SetShaderResourceView(u32 Idx, const T& Buffer)
 	{
-		CommandList->SetComputeRootShaderResourceView(Idx, GpuPtr);
+		CommandList->SetComputeRootShaderResourceView(Idx, Buffer.GpuPtr);
 	}
 
-	void SetConstantBufferView(u32 Idx, D3D12_GPU_VIRTUAL_ADDRESS GpuPtr)
+	template<typename T>
+	void SetConstantBufferView(u32 Idx, const T& Buffer)
 	{
-		CommandList->SetComputeRootConstantBufferView(Idx, GpuPtr);
+		CommandList->SetComputeRootConstantBufferView(Idx, Buffer.GpuPtr);
 	}
 
-	void SetUnorderedAccessView(u32 Idx, D3D12_GPU_VIRTUAL_ADDRESS GpuPtr)
+	template<typename T>
+	void SetUnorderedAccessView(u32 Idx, const T& Buffer)
 	{
-		CommandList->SetComputeRootUnorderedAccessView(Idx, GpuPtr);
+		CommandList->SetComputeRootUnorderedAccessView(Idx, Buffer.GpuPtr);
 	}
 
 	ID3D12GraphicsCommandList* CommandList;

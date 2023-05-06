@@ -1227,7 +1227,7 @@ GeneratePlanes(plane* Planes, mat4 Proj, float NearZ, float FarZ = 0)
 inline mat4
 LookAt(vec3 CamPos, vec3 Target, vec3 Up)
 {
-    vec3 z = (Target - CamPos).Normalize();
+    vec3 z = (CamPos - Target).Normalize();
     vec3 x = Cross(Up, z).Normalize();
     vec3 y = Cross(z, x);
 

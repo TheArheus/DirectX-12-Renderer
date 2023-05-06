@@ -51,7 +51,7 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 	{
 		switch(Message)
 		{
-#if 0
+#if 1
 			// TODO: Consider to do in the future
 			// correct window resizing
 			case WM_ENTERSIZEMOVE:
@@ -64,7 +64,6 @@ LRESULT window::DispatchMessages(HWND hWindow, UINT Message, WPARAM wParam, LPAR
 				IsGfxPaused = false;
 				if (Gfx)
 				{
-					Gfx->RecreateSwapchain(Width, Height);
 				}
 				return 0;
 			} break;

@@ -28,6 +28,8 @@ struct world_update
 {
 	row_major float4x4 View;
 	row_major float4x4 Proj;
+	float4 CameraPos;
+	float4 CameraDir;
 	uint ColorSourceCount;
 };
 
@@ -37,9 +39,12 @@ ConstantBuffer<world_update> WorldUpdate : register(b0, space0);
 struct vert_out
 {
 	float4 Pos  : SV_Position;
-	float4 Coord: POSITION;
+	float4 Coord: POSITION0;
 	float4 Norm : NORMAL;
 	float4 Col  : COLOR;
+
+	float4 CameraPos : POSITION1;
+	float4 CameraDir : POSITION2;
 };
 
 
@@ -56,6 +61,8 @@ vert_out main(vert_in In, uint Index : SV_VertexID, uint InstanceID : SV_Instanc
 	Out.Pos = mul(WorldUpdate.Proj, Out.Pos);
 
 	Out.Coord = Out.Pos;
+	Out.CameraPos = WorldUpdate.CameraPos;
+	Out.CameraDir = WorldUpdate.CameraDir;
 
 	Out.Norm = normalize(float4(Normal, 0.0));
 

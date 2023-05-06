@@ -48,6 +48,8 @@ struct global_world_data
 {
 	mat4 View;
 	mat4 Proj;
+	vec4 CameraPos;
+	vec4 CameraDir;
 	u32  ColorSourceCount;
 };
 
@@ -154,112 +156,38 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 
 	// Graphics Resources
 	heap_alloc GfxDescriptorHeapHandle = DirectWindow.Gfx->ResourceHeap.Allocate(2);
-	D3D12_SHADER_RESOURCE_VIEW_DESC GfxSrvDesc0 = {};
-	GfxSrvDesc0.Format = DXGI_FORMAT_UNKNOWN;
-	GfxSrvDesc0.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-	GfxSrvDesc0.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	GfxSrvDesc0.Buffer.FirstElement = 0;
-	GfxSrvDesc0.Buffer.NumElements = DrawCount;
-	GfxSrvDesc0.Buffer.StructureByteStride = sizeof(indirect_draw_indexed_command);
-	GfxSrvDesc0.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateShaderResourceView(IndirectDrawIndexedCommands.Handle.Get(), &GfxSrvDesc0, GfxDescriptorHeapHandle.GetNextCpuHandle());
-
-	D3D12_CONSTANT_BUFFER_VIEW_DESC GfxCbvDesc0 = {};
-	GfxCbvDesc0.BufferLocation = WorldUpdateBuffer.GpuPtr;
-	GfxCbvDesc0.SizeInBytes = WorldUpdateBuffer.Size;
-	DirectWindow.Gfx->Device->CreateConstantBufferView(&GfxCbvDesc0, GfxDescriptorHeapHandle.GetNextCpuHandle());
+	GfxDescriptorHeapHandle.PushShaderResourceBufferView(DirectWindow.Gfx, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command), DrawCount);
+	GfxDescriptorHeapHandle.PushConstantBufferView(DirectWindow.Gfx, WorldUpdateBuffer);
 
 	// Compute Resources
 	heap_alloc MeshOffsetsTable = DirectWindow.Gfx->ResourceHeap.Allocate(1);
-	D3D12_SHADER_RESOURCE_VIEW_DESC CmpSrvDesc0 = {};
-	CmpSrvDesc0.Format = DXGI_FORMAT_UNKNOWN;
-	CmpSrvDesc0.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-	CmpSrvDesc0.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	CmpSrvDesc0.Buffer.FirstElement = 0;
-	CmpSrvDesc0.Buffer.NumElements = Geometries.Offsets.size();
-	CmpSrvDesc0.Buffer.StructureByteStride = sizeof(mesh::offset);
-	CmpSrvDesc0.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateShaderResourceView(GeometryOffsets.Handle.Get(), &CmpSrvDesc0, MeshOffsetsTable.GetNextCpuHandle());
+	MeshOffsetsTable.PushShaderResourceBufferView(DirectWindow.Gfx, GeometryOffsets, sizeof(mesh::offset), Geometries.Offsets.size());
 
 	heap_alloc IndirectCommandsDataTable = DirectWindow.Gfx->ResourceHeap.Allocate(4);
-	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpSrvDesc1 = {};
-	CmpSrvDesc1.Format = DXGI_FORMAT_UNKNOWN;
-	CmpSrvDesc1.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	CmpSrvDesc1.Buffer.FirstElement = 0;
-	CmpSrvDesc1.Buffer.NumElements = MeshDrawCommandData.size();
-	CmpSrvDesc1.Buffer.StructureByteStride = sizeof(mesh_draw_command_input);
-	CmpSrvDesc1.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshDrawCommandDataBuffer.Handle.Get(), nullptr, &CmpSrvDesc1, IndirectCommandsDataTable.GetNextCpuHandle());
-
-	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc0 = {};
-	CmpUavDesc0.Format = DXGI_FORMAT_UNKNOWN;
-	CmpUavDesc0.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	CmpUavDesc0.Buffer.FirstElement = 0;
-	CmpUavDesc0.Buffer.NumElements = DrawCount;
-	CmpUavDesc0.Buffer.StructureByteStride = sizeof(indirect_draw_command);
-	CmpUavDesc0.Buffer.CounterOffsetInBytes = IndirectDrawCommands.CounterOffset;
-	CmpUavDesc0.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawCommands.Handle.Get(), IndirectDrawCommands.Handle.Get(), &CmpUavDesc0, IndirectCommandsDataTable.GetNextCpuHandle());
-
-	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc1 = {};
-	CmpUavDesc1.Format = DXGI_FORMAT_UNKNOWN;
-	CmpUavDesc1.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	CmpUavDesc1.Buffer.FirstElement = 0;
-	CmpUavDesc1.Buffer.NumElements = DrawCount;
-	CmpUavDesc1.Buffer.StructureByteStride = sizeof(indirect_draw_indexed_command);
-	CmpUavDesc1.Buffer.CounterOffsetInBytes = IndirectDrawIndexedCommands.CounterOffset;
-	CmpUavDesc1.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(IndirectDrawIndexedCommands.Handle.Get(), IndirectDrawIndexedCommands.Handle.Get(), &CmpUavDesc1, IndirectCommandsDataTable.GetNextCpuHandle());
-
-	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc2 = {};
-	CmpUavDesc2.Format = DXGI_FORMAT_UNKNOWN;
-	CmpUavDesc2.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	CmpUavDesc2.Buffer.FirstElement = 0;
-	CmpUavDesc2.Buffer.NumElements = DrawCount;
-	CmpUavDesc2.Buffer.StructureByteStride = sizeof(mesh_draw_command);
-	CmpUavDesc2.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshDrawCommandBuffer.Handle.Get(), nullptr, &CmpUavDesc2, IndirectCommandsDataTable.GetNextCpuHandle());
+	IndirectCommandsDataTable.PushUnorderedAccessBufferView(DirectWindow.Gfx, MeshDrawCommandDataBuffer, sizeof(mesh_draw_command_input), MeshDrawCommandData.size());
+	IndirectCommandsDataTable.PushUnorderedAccessBufferViewWithCounter(DirectWindow.Gfx, IndirectDrawCommands, IndirectDrawCommands, sizeof(indirect_draw_command), DrawCount);
+	IndirectCommandsDataTable.PushUnorderedAccessBufferViewWithCounter(DirectWindow.Gfx, IndirectDrawIndexedCommands, IndirectDrawIndexedCommands, sizeof(indirect_draw_indexed_command), DrawCount);
+	IndirectCommandsDataTable.PushUnorderedAccessBufferView(DirectWindow.Gfx, MeshDrawCommandBuffer, sizeof(mesh_draw_command), DrawCount);
 
 	heap_alloc CullingCommonInputTable = DirectWindow.Gfx->ResourceHeap.Allocate(1);
-	D3D12_UNORDERED_ACCESS_VIEW_DESC CmpUavDesc3 = {};
-	CmpUavDesc3.Format = DXGI_FORMAT_UNKNOWN;
-	CmpUavDesc3.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	CmpUavDesc3.Buffer.FirstElement = 0;
-	CmpUavDesc3.Buffer.NumElements = 1;
-	CmpUavDesc3.Buffer.StructureByteStride = sizeof(mesh_comp_culling_common_input);
-	CmpUavDesc3.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-	DirectWindow.Gfx->Device->CreateUnorderedAccessView(MeshCommonCullingData.Handle.Get(), nullptr, &CmpUavDesc3, CullingCommonInputTable.GetNextCpuHandle());
+	CullingCommonInputTable.PushUnorderedAccessBufferView(DirectWindow.Gfx, MeshCommonCullingData, sizeof(mesh_comp_culling_common_input));
 
 	heap_alloc DepthBufferTable = DirectWindow.Gfx->ResourceHeap.Allocate(1);
-	D3D12_SHADER_RESOURCE_VIEW_DESC DepthTextureSRVDesc = {};
-	DepthTextureSRVDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	DepthTextureSRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	DepthTextureSRVDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	DepthTextureSRVDesc.Texture2D.MipLevels = 1;
-	DepthTextureSRVDesc.Texture2D.MostDetailedMip = 0;
-	DepthTextureSRVDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-	DirectWindow.Gfx->Device->CreateShaderResourceView(DirectWindow.Gfx->DepthStencilBuffer.Handle.Get(), &DepthTextureSRVDesc, DepthBufferTable.GetNextCpuHandle());
+	DepthBufferTable.PushShaderResourceTexture2DView(DirectWindow.Gfx, DirectWindow.Gfx->DepthStencilBuffer);
 
 	heap_alloc HiZInputTable  = DirectWindow.Gfx->ResourceHeap.Allocate(DepthMipLevel);
 	heap_alloc HiZOutputTable = DirectWindow.Gfx->ResourceHeap.Allocate(DepthMipLevel);
-	DepthTextureSRVDesc.Texture2D.MipLevels = 1;
 	for(u32 DepthIdx = 0;
 		DepthIdx < DepthMipLevel;
 		++DepthIdx)
 	{
-		DirectWindow.Gfx->Device->CreateShaderResourceView(DepthTextures[DepthIdx].Handle.Get(), &DepthTextureSRVDesc, HiZInputTable.GetNextCpuHandle());
+		HiZInputTable.PushShaderResourceTexture2DView(DirectWindow.Gfx, DepthTextures[DepthIdx]);
 	}
-
-	D3D12_UNORDERED_ACCESS_VIEW_DESC DepthTextureUAVDesc = {};
-	DepthTextureUAVDesc.Format = DXGI_FORMAT_R32_FLOAT;
-	DepthTextureUAVDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-	DepthTextureUAVDesc.Texture2D.PlaneSlice = 0;
 	for(u32 DepthIdx = 0;
 		DepthIdx < DepthMipLevel;
 		++DepthIdx)
 	{
-		DepthTextureUAVDesc.Texture2D.MipSlice = 0;
-		DirectWindow.Gfx->Device->CreateUnorderedAccessView(DepthTextures[DepthIdx].Handle.Get(), nullptr, &DepthTextureUAVDesc, HiZOutputTable.GetNextCpuHandle());
+		HiZOutputTable.PushUnorderedAccessTexture2DView(DirectWindow.Gfx, DepthTextures[DepthIdx]);
 	}
 
 	shader_input GfxRootSignature;
@@ -309,14 +237,36 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 	DirectWindow.Gfx->RtvHeap.Reset();
 	DirectWindow.Gfx->DsvHeap.Reset();
 
+	vec3 UpVector(0, 1, 0);
 	double TimeLast = window::GetTimestamp();
 	double AvgCpuTime = 0.0;
 	while(DirectWindow.IsRunning())
 	{
 		auto Result = DirectWindow.ProcessMessages();
 		if(Result) return *Result;
+		if(DirectWindow.Width != DirectWindow.Gfx->Width || DirectWindow.Height != DirectWindow.Gfx->Height)
+		{
+			DirectWindow.Gfx->RecreateSwapchain(DirectWindow.Width, DirectWindow.Height);
 
-		WorldUpdate = {LookAt(CameraPos, CameraPos + ViewDir, vec3(0, 1, 0)), PerspectiveInfFarZ(Pi<r64>/3, 1240, 720, 1)};
+			HiWidth  = PreviousPowerOfTwo(DirectWindow.Width);
+			HiHeight = PreviousPowerOfTwo(DirectWindow.Height);
+			DepthMipLevel = GetImageMipLevels(HiWidth, HiHeight);
+			DepthTextures = std::vector<texture>(DepthMipLevel);
+			for(u32 DepthIdx = 0;
+				DepthIdx < DepthMipLevel;
+				++DepthIdx)
+			{
+				DepthTextures[DepthIdx] = texture(DirectWindow.Gfx, max(1, HiWidth >> DepthIdx), max(1, HiHeight >> DepthIdx), 1, DXGI_FORMAT_R32_FLOAT, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+			}
+		}
+
+		WorldUpdate = 
+		{
+			LookAt(CameraPos, CameraPos + ViewDir, UpVector), 
+			PerspectiveInfFarZ(Pi<r64>/3, DirectWindow.Gfx->Width, DirectWindow.Gfx->Height, 1),
+			vec4(CameraPos, 0),
+			vec4(ViewDir, 0),
+		};
 		WorldUpdateBuffer.Update(DirectWindow.Gfx, (void*)&WorldUpdate);
 
 		if(!DirectWindow.IsGfxPaused)
@@ -324,9 +274,9 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			{
 				FrustCullingContext.Begin(DirectWindow.Gfx->CmpCommandQueue, DirectWindow.Gfx->ResourceHeap.Handle.Get());
 
-				FrustCullingContext.SetDescriptorTable(0, MeshOffsetsTable.GetGpuHandle(0));
-				FrustCullingContext.SetDescriptorTable(1, IndirectCommandsDataTable.GetGpuHandle(0));
-				FrustCullingContext.SetUnorderedAccessView(2, MeshCommonCullingData.GpuPtr);
+				FrustCullingContext.SetDescriptorTable(0, MeshOffsetsTable);
+				FrustCullingContext.SetDescriptorTable(1, IndirectCommandsDataTable);
+				FrustCullingContext.SetUnorderedAccessView(2, MeshCommonCullingData);
 
 				FrustCullingContext.CommandList->CopyBufferRegion(IndirectDrawCommands.Handle.Get(), IndirectDrawCommands.CounterOffset, GeometriesCounterBuffer.Handle.Get(), 0, sizeof(u32));
 				FrustCullingContext.CommandList->CopyBufferRegion(IndirectDrawIndexedCommands.Handle.Get(), IndirectDrawIndexedCommands.CounterOffset, GeometriesCounterBuffer.Handle.Get(), 0, sizeof(u32));
@@ -394,8 +344,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 					DepthTextureIdx < DepthMipLevel;
 					++DepthTextureIdx)
 				{
-					In  = DepthTextureIdx == 0 ? DepthBufferTable.GetGpuHandle(0) : HiZInputTable.GetGpuHandle(DepthTextureIdx - 1);
-					Out = DepthTextureIdx == 0 ? HiZOutputTable.GetGpuHandle(0) : HiZOutputTable.GetGpuHandle(DepthTextureIdx);
+					DepthTextureIdx == 0 ? 
+						ReduceContext.SetDescriptorTable(0, DepthBufferTable) : 
+						ReduceContext.SetDescriptorTable(0, HiZInputTable, DepthTextureIdx - 1);
+					DepthTextureIdx == 0 ? 
+						ReduceContext.SetDescriptorTable(1, HiZOutputTable) : 
+						ReduceContext.SetDescriptorTable(1, HiZOutputTable, DepthTextureIdx);
 
 					if(DepthTextureIdx != 0)
 					{
@@ -406,8 +360,6 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 					NewHiWidth  = max(1, HiWidth  >> (DepthTextureIdx));
 					NewHiHeight = max(1, HiHeight >> (DepthTextureIdx));
 
-					ReduceContext.SetDescriptorTable(0, In);
-					ReduceContext.SetDescriptorTable(1, Out);
 					ReduceContext.Execute(NewHiWidth, NewHiHeight, 1);
 				}
 
@@ -420,10 +372,10 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 			{
 				OcclCullingContext.Begin(DirectWindow.Gfx->CmpCommandQueue, DirectWindow.Gfx->ResourceHeap.Handle.Get());
 
-				OcclCullingContext.SetDescriptorTable(0, MeshOffsetsTable.GetGpuHandle(0));
-				OcclCullingContext.SetDescriptorTable(1, IndirectCommandsDataTable.GetGpuHandle(0));
-				OcclCullingContext.SetUnorderedAccessView(2, MeshCommonCullingData.GpuPtr);
-				OcclCullingContext.SetDescriptorTable(3, HiZInputTable.GetGpuHandle(0));
+				OcclCullingContext.SetDescriptorTable(0, MeshOffsetsTable);
+				OcclCullingContext.SetDescriptorTable(1, IndirectCommandsDataTable);
+				OcclCullingContext.SetUnorderedAccessView(2, MeshCommonCullingData);
+				OcclCullingContext.SetDescriptorTable(3, HiZInputTable);
 
 				D3D12_RESOURCE_BARRIER Barrier[] = 
 				{
@@ -456,9 +408,7 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 				GfxContext.End(DirectWindow.Gfx->GfxCommandQueue);
 			}
 
-			DirectWindow.Gfx->SwapChain->Present(0, 0);
-
-			DirectWindow.Gfx->BackBufferIndex = DirectWindow.Gfx->SwapChain->GetCurrentBackBufferIndex();
+			DirectWindow.Gfx->Present();
 		}
 
 
@@ -479,12 +429,12 @@ int WinMain(HINSTANCE CurrInst, HINSTANCE PrevInst, PSTR Cmd, int Show)
 		if(DirectWindow.Buttons[EC_W].IsDown)
 		{
 			Disp = ViewDir * 0.1;
-			CameraPos -= Disp;
+			CameraPos += Disp;
 		}
 		if(DirectWindow.Buttons[EC_S].IsDown)
 		{
 			Disp = ViewDir * 0.1;
-			CameraPos += Disp;
+			CameraPos -= Disp;
 		}
 		if(DirectWindow.Buttons[EC_A].IsDown || DirectWindow.Buttons[EC_LEFT].IsDown)
 		{

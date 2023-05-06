@@ -5,6 +5,9 @@ renderer_backend(HWND Window, u32 ClientWidth, u32 ClientHeight)
 	Viewport = { 0, 0, (r32)ClientWidth, (r32)ClientHeight, D3D12_MIN_DEPTH, D3D12_MAX_DEPTH };
 	Rect = { 0, 0, (LONG)ClientWidth, (LONG)ClientHeight };
 
+	Width = ClientWidth;
+	Height = ClientHeight;
+
 #if defined(_DEBUG)
 	{
 		ComPtr<ID3D12Debug> Debug;
@@ -250,6 +253,8 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 	RtvHeap.Reset();
 	DsvHeap.Reset();
 
+	Width  = NewWidth;
+	Height = NewHeight;
 	Viewport.Width  = (r32)NewWidth;
 	Viewport.Height = (r32)NewHeight;
 	Rect = { 0, 0, (LONG)NewWidth, (LONG)NewHeight };
@@ -299,5 +304,12 @@ RecreateSwapchain(u32 NewWidth, u32 NewHeight)
 
 	GfxCommandQueue.ExecuteAndRemove(CommandList);
 	Fence.Flush(GfxCommandQueue);
+}
+
+void renderer_backend::
+Present()
+{
+	SwapChain->Present(0, 0);
+	BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 }
 

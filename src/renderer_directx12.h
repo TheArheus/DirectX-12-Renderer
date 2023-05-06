@@ -148,6 +148,85 @@ public:
 		return Result;
 	}
 
+	template<typename T>
+	void PushShaderResourceBufferView(std::unique_ptr<T>& App, const buffer& Buffer, size_t ElementSize, size_t ElementCount = 1)
+	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
+		SrvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		SrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		SrvDesc.Buffer.FirstElement = 0;
+		SrvDesc.Buffer.NumElements = ElementCount;
+		SrvDesc.Buffer.StructureByteStride = ElementSize;
+		SrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+		App->Device->CreateShaderResourceView(Buffer.Handle.Get(), &SrvDesc, GetNextCpuHandle());
+	}
+
+	template<typename T>
+	void PushShaderResourceTexture2DView(std::unique_ptr<T>& App, const texture& Texture)
+	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC SrvDesc = {};
+		SrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		SrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		SrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		SrvDesc.Texture2D.MipLevels = 1;
+		SrvDesc.Texture2D.MostDetailedMip = 0;
+		SrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+		App->Device->CreateShaderResourceView(Texture.Handle.Get(), &SrvDesc, GetNextCpuHandle());
+	}
+
+	template<typename T>
+	void PushUnorderedAccessBufferView(std::unique_ptr<T>& App, const buffer& Buffer, size_t ElementSize, size_t ElementCount = 1)
+	{
+		D3D12_UNORDERED_ACCESS_VIEW_DESC UavDesc = {};
+		UavDesc.Format = DXGI_FORMAT_UNKNOWN;
+		UavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+		UavDesc.Buffer.FirstElement = 0;
+		UavDesc.Buffer.NumElements = ElementCount;
+		UavDesc.Buffer.StructureByteStride = ElementSize;
+		UavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+		App->Device->CreateUnorderedAccessView(Buffer.Handle.Get(), nullptr, &UavDesc, GetNextCpuHandle());
+	}
+
+	template<typename T>
+	void PushUnorderedAccessBufferViewWithCounter(std::unique_ptr<T>& App, const buffer& CounterBuffer, const buffer& Buffer, size_t ElementSize, size_t ElementCount = 1)
+	{
+		D3D12_UNORDERED_ACCESS_VIEW_DESC UavDesc = {};
+		UavDesc.Format = DXGI_FORMAT_UNKNOWN;
+		UavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+		UavDesc.Buffer.FirstElement = 0;
+		UavDesc.Buffer.NumElements = ElementCount;
+		UavDesc.Buffer.StructureByteStride = ElementSize;
+		UavDesc.Buffer.CounterOffsetInBytes = CounterBuffer.CounterOffset;
+		UavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+		App->Device->CreateUnorderedAccessView(Buffer.Handle.Get(), CounterBuffer.Handle.Get(), &UavDesc, GetNextCpuHandle());
+	}
+
+	template<typename T>
+	void PushUnorderedAccessTexture2DView(std::unique_ptr<T>& App, const texture& Texture, u32 MipSlice = 0)
+	{
+		D3D12_UNORDERED_ACCESS_VIEW_DESC UavDesc = {};
+		UavDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		UavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+		UavDesc.Texture2D.PlaneSlice = 0;
+		UavDesc.Texture2D.MipSlice = MipSlice;
+		App->Device->CreateUnorderedAccessView(Texture.Handle.Get(), nullptr, &UavDesc, GetNextCpuHandle());
+	}
+
+	template<typename T>
+	void PushConstantBufferView(std::unique_ptr<T>& App, const buffer& Buffer)
+	{
+		D3D12_CONSTANT_BUFFER_VIEW_DESC CbvDesc = {};
+		CbvDesc.BufferLocation = Buffer.GpuPtr;
+		CbvDesc.SizeInBytes = Buffer.Size;
+		App->Device->CreateConstantBufferView(&CbvDesc, GetNextCpuHandle());
+	}
+
+	void Reset()
+	{
+		Next = 0;
+	}
+
 	D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle;
 	D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle;
 };
@@ -223,6 +302,12 @@ public:
 
 	ID3D12PipelineState* CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, std::initializer_list<const std::string> ShaderList);
 	ID3D12PipelineState* CreateComputePipeline(ID3D12RootSignature* RootSignature, const std::string& ComputeShader);
+
+	void Present();
+
+public:
+	u32 Width;
+	u32 Height;
 
 	D3D12_VIEWPORT Viewport;
 	D3D12_RECT Rect;

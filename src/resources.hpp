@@ -37,36 +37,11 @@ struct buffer
 		   u64 Offset, void* Data, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
 		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : WithCounter(NewWithCounter)
 	{
-		ComPtr<ID3D12Resource> TempBuffer;
-		ComPtr<ID3D12Device6> Device;
+		CreateResource(App, Heap, Offset, NewSize, NewWithCounter, Alignment, Flags);
 
-		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
-		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
-						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
-		Size = BufferSize;
-		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
-		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
-
-		D3D12_CLEAR_VALUE Clear = {};
-		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
-		App->Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
-
-		void* CpuPtr;
-		TempBuffer->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, NewSize);
-		TempBuffer->Unmap(0, 0);
-
-		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
-		App->GfxCommandQueue.Reset();
-		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
-
-		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
-		App->Fence.Flush(App->GfxCommandQueue);
+		Update(App, Data);
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
-		CounterOffset = NewSize;
 	}
 
 	template<class T>
@@ -74,35 +49,9 @@ struct buffer
 		   u64 Offset, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
 		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : WithCounter(NewWithCounter)
 	{
-		ComPtr<ID3D12Resource> TempBuffer;
-		ComPtr<ID3D12Device6> Device;
-
-		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
-		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
-						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
-		Size = BufferSize;
-		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
-		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
-
-		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
-		App->Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
-
-		void* CpuPtr;
-		TempBuffer->Map(0, nullptr, &CpuPtr);
-		memset(CpuPtr, 0, Size);
-		TempBuffer->Unmap(0, 0);
-
-		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
-		App->GfxCommandQueue.Reset();
-		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
-
-		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
-		App->Fence.Flush(App->GfxCommandQueue);
+		CreateResource(App, Heap, Offset, NewSize, NewWithCounter, Alignment, Flags);
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
-		CounterOffset = NewSize;
 	}
 
 	template<class T>
@@ -110,36 +59,11 @@ struct buffer
 		   void* Data, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
 		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : WithCounter(NewWithCounter)
 	{
-		ComPtr<ID3D12Resource> TempBuffer;
-		ComPtr<ID3D12Device6> Device;
+		CreateResource(App, NewSize, NewWithCounter, Alignment, Flags);
 
-		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
-		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
-						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
-		Size = BufferSize;
-		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
-		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
-
-		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
-		App->Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
-
-		void* CpuPtr;
-		TempBuffer->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, NewSize);
-		TempBuffer->Unmap(0, 0);
-
-		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
-		App->GfxCommandQueue.Reset();
-		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
-
-		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
-		App->Fence.Flush(App->GfxCommandQueue);
+		Update(App, Data);
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
-		CounterOffset = NewSize;
 	}
 
 	template<class T>
@@ -147,36 +71,9 @@ struct buffer
 		   u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
 		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE) : WithCounter(NewWithCounter)
 	{
-		ComPtr<ID3D12Resource> TempBuffer;
-		ComPtr<ID3D12Device6> Device;
-
-		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
-		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
-						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
-		Size = BufferSize;
-		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
-		CD3DX12_RESOURCE_DESC TemporarDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize);
-
-		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &TemporarDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
-		App->Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
-
-		void* CpuPtr;
-		TempBuffer->Map(0, nullptr, &CpuPtr);
-		memset(CpuPtr, 0, Size);
-		TempBuffer->Unmap(0, 0);
-
-		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
-		App->GfxCommandQueue.Reset();
-		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
-
-		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
-		App->Fence.Flush(App->GfxCommandQueue);
+		CreateResource(App, NewSize, NewWithCounter, Alignment, Flags);
 
 		GpuPtr = Handle->GetGPUVirtualAddress();
-		CounterOffset = NewSize;
 	}
 
 	template<class T>
@@ -236,6 +133,38 @@ struct buffer
 		TempBuffer->Unmap(0, 0);
 	}
 
+	template<class T>
+	void CreateResource(std::unique_ptr<T>& App, ID3D12Heap1* Heap, 
+		   u64 Offset, u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE)
+	{
+		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
+		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
+						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
+		Size = BufferSize;
+		CounterOffset = NewSize;
+
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
+		App->Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
+	}
+
+	template<class T>
+	void CreateResource(std::unique_ptr<T>& App, 
+		   u64 NewSize, bool NewWithCounter = false, u64 Alignment = 0, 
+		   D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE)
+	{
+		NewSize = WithCounter ? AlignUp(NewSize, D3D12_UAV_COUNTER_PLACEMENT_ALIGNMENT) : NewSize;
+		u64 BufferSize = Alignment == 0 ? NewSize + WithCounter * sizeof(u32) : 
+						 AlignUp(NewSize + WithCounter * sizeof(u32), Alignment);
+		Size = BufferSize;
+		CounterOffset = NewSize;
+
+		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		CD3DX12_RESOURCE_DESC ResourceDesc = CD3DX12_RESOURCE_DESC::Buffer(BufferSize, Flags);
+
+		App->Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
+	}
+
 	u64  Size;
 	u32  CounterOffset = 0;
 	bool WithCounter   = false;
@@ -250,12 +179,36 @@ struct texture
 	texture() = default;
 
 	template<class T>
-	texture(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 MipLevels = 1, u64 Alignment = 0): Width(NewWidth), Height(NewHeight), Format(_Format)
+	texture(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 _MipLevels = 1, u64 _Alignment = 0): Width(NewWidth), Height(NewHeight), Format(_Format), MipLevels(_MipLevels), Depth(DepthOrArraySize), Alignment(_Alignment)
+	{
+		CreateResource(App, Heap, Offset, NewWidth, NewHeight, DepthOrArraySize, _Format, MipLevels, Alignment);
+		Update(App, Data);
+	}
+
+	template<class T>
+	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 _MipLevels = 1, u64 _Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE): Width(NewWidth), Height(NewHeight), Format(_Format), MipLevels(_MipLevels), Depth(DepthOrArraySize), Alignment(_Alignment)
+	{
+		CreateResource(App, NewWidth, NewHeight, DepthOrArraySize, _Format, MipLevels, Alignment, Flags);
+		Update(App, Data);
+	}
+
+	template<class T>
+	texture(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 _MipLevels = 1, u64 _Alignment = 0): Width(NewWidth), Height(NewHeight), Format(_Format), MipLevels(_MipLevels), Depth(DepthOrArraySize), Alignment(_Alignment)
+	{
+		CreateResource(App, Heap, Offset, NewWidth, NewHeight, DepthOrArraySize, _Format, MipLevels, Alignment);
+	}
+
+	template<class T>
+	texture(std::unique_ptr<T>& App, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 _MipLevels = 1, u64 _Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE): Width(NewWidth), Height(NewHeight), Format(_Format), MipLevels(_MipLevels), Depth(DepthOrArraySize), Alignment(_Alignment)
+	{
+		CreateResource(App, NewWidth, NewHeight, DepthOrArraySize, _Format, MipLevels, Alignment, Flags);
+	}
+
+	template<typename T>
+	void Update(std::unique_ptr<T>& App, void* Data)
 	{
 		ComPtr<ID3D12Resource> TempBuffer;
-		ComPtr<ID3D12Device6> Device;
-
-		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
 
 		D3D12_RESOURCE_DESC ResourceDesc = {};
 		ResourceDesc.Format = Format;
@@ -263,116 +216,38 @@ struct texture
 		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 		ResourceDesc.Width = Width;
 		ResourceDesc.Height = Height;
-		ResourceDesc.DepthOrArraySize = DepthOrArraySize;
+		ResourceDesc.DepthOrArraySize = Depth;
 		ResourceDesc.MipLevels = MipLevels;
 		ResourceDesc.SampleDesc.Count = 1;
 		ResourceDesc.SampleDesc.Quality = 0;
 		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
-		D3D12_RESOURCE_ALLOCATION_INFO AllocInfo = Device->GetResourceAllocationInfo(0, 1, &ResourceDesc);
-
 		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
-		App->Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
-
-		u64 Size = Width * Height * GetFormatSize(Format);
-		void* CpuPtr;
-		TempBuffer->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
-		TempBuffer->Unmap(0, 0);
 
 		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
 		App->GfxCommandQueue.Reset();
 		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
 
-		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
+		CD3DX12_RESOURCE_BARRIER Barrier[] = 
+		{
+			CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE),
+		};
+		GfxCommandList->ResourceBarrier(1, Barrier);
+
+		GfxCommandList->CopyResource(TempBuffer.Get(), Handle.Get());
+
+		Barrier[0] = CD3DX12_RESOURCE_BARRIER::Transition(Handle.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+		GfxCommandList->ResourceBarrier(1, Barrier);
+
+		GfxCommandList->CopyResource(TempBuffer.Get(), Handle.Get());
 		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
 		App->Fence.Flush(App->GfxCommandQueue);
-	}
-
-	template<class T>
-	texture(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 MipLevels = 1, u64 Alignment = 0): Width(NewWidth), Height(NewHeight), Format(_Format)
-	{
-		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-
-		D3D12_RESOURCE_DESC ResourceDesc = {};
-		ResourceDesc.Format = Format;
-		ResourceDesc.Alignment = Alignment;
-		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-		ResourceDesc.Width = Width;
-		ResourceDesc.Height = Height;
-		ResourceDesc.DepthOrArraySize = DepthOrArraySize;
-		ResourceDesc.MipLevels = MipLevels;
-		ResourceDesc.SampleDesc.Count = 1;
-		ResourceDesc.SampleDesc.Quality = 0;
-		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-
-		D3D12_RESOURCE_ALLOCATION_INFO AllocInfo = App->Device->GetResourceAllocationInfo(0, 1, &ResourceDesc);
-
-		App->Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
-	}
-
-	template<class T>
-	texture(std::unique_ptr<T>& App, void* Data, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 MipLevels = 1, u64 Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE): Width(NewWidth), Height(NewHeight), Format(_Format)
-	{
-		ComPtr<ID3D12Resource> TempBuffer;
-
-		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-
-		D3D12_RESOURCE_DESC ResourceDesc = {};
-		ResourceDesc.Format = Format;
-		ResourceDesc.Alignment = Alignment;
-		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-		ResourceDesc.Width = Width;
-		ResourceDesc.Height = Height;
-		ResourceDesc.DepthOrArraySize = DepthOrArraySize;
-		ResourceDesc.MipLevels = MipLevels;
-		ResourceDesc.SampleDesc.Count = 1;
-		ResourceDesc.SampleDesc.Quality = 0;
-		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-		ResourceDesc.Flags = Flags;
-
-		D3D12_RESOURCE_ALLOCATION_INFO AllocInfo = App->Device->GetResourceAllocationInfo(0, 1, &ResourceDesc);
-
-		App->Device->CreateCommittedResource(&ResourceTypeTemp, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&TempBuffer));
-		App->Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
 
 		u64 Size = Width * Height * GetFormatSize(Format);
 		void* CpuPtr;
 		TempBuffer->Map(0, nullptr, &CpuPtr);
-		memcpy(CpuPtr, Data, Size);
+		memcpy(Data, CpuPtr, Size);
 		TempBuffer->Unmap(0, 0);
-
-		ID3D12GraphicsCommandList* GfxCommandList = App->GfxCommandQueue.AllocateCommandList();
-		App->GfxCommandQueue.Reset();
-		GfxCommandList->Reset(App->GfxCommandQueue.CommandAlloc.Get(), nullptr);
-
-		GfxCommandList->CopyResource(Handle.Get(), TempBuffer.Get());
-		App->GfxCommandQueue.ExecuteAndRemove(GfxCommandList);
-		App->Fence.Flush(App->GfxCommandQueue);
-	}
-
-	template<class T>
-	texture(std::unique_ptr<T>& App, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 MipLevels = 1, u64 Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE): Width(NewWidth), Height(NewHeight), Format(_Format)
-	{
-		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-
-		D3D12_RESOURCE_DESC ResourceDesc = {};
-		ResourceDesc.Format = Format;
-		ResourceDesc.Alignment = Alignment;
-		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-		ResourceDesc.Width = Width;
-		ResourceDesc.Height = Height;
-		ResourceDesc.DepthOrArraySize = DepthOrArraySize;
-		ResourceDesc.MipLevels = MipLevels;
-		ResourceDesc.SampleDesc.Count = 1;
-		ResourceDesc.SampleDesc.Quality = 0;
-		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-		ResourceDesc.Flags = Flags;
-
-		D3D12_RESOURCE_ALLOCATION_INFO AllocInfo = App->Device->GetResourceAllocationInfo(0, 1, &ResourceDesc);
-
-		App->Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
 	}
 
 	template<class T>
@@ -385,12 +260,12 @@ struct texture
 
 		D3D12_RESOURCE_DESC ResourceDesc = {};
 		ResourceDesc.Format = Format;
-		ResourceDesc.Alignment = 0;
+		ResourceDesc.Alignment = Alignment;
 		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 		ResourceDesc.Width = Width;
 		ResourceDesc.Height = Height;
-		ResourceDesc.DepthOrArraySize = 1;
-		ResourceDesc.MipLevels = 1;
+		ResourceDesc.DepthOrArraySize = Depth;
+		ResourceDesc.MipLevels = MipLevels;
 		ResourceDesc.SampleDesc.Count = 1;
 		ResourceDesc.SampleDesc.Quality = 0;
 		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -424,8 +299,56 @@ struct texture
 		TempBuffer->Unmap(0, 0);
 	}
 
+	template<class T>
+	void CreateResource(std::unique_ptr<T>& App, ID3D12Heap1* Heap, u64 Offset, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 _MipLevels = 1, u64 _Alignment = 0)
+	{
+		CD3DX12_HEAP_PROPERTIES ResourceTypeTemp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+
+		D3D12_RESOURCE_DESC ResourceDesc = {};
+		ResourceDesc.Format = Format;
+		ResourceDesc.Alignment = Alignment;
+		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		ResourceDesc.Width = Width;
+		ResourceDesc.Height = Height;
+		ResourceDesc.DepthOrArraySize = Depth;
+		ResourceDesc.MipLevels = MipLevels;
+		ResourceDesc.SampleDesc.Count = 1;
+		ResourceDesc.SampleDesc.Quality = 0;
+		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+		D3D12_RESOURCE_ALLOCATION_INFO AllocInfo = App->Device->GetResourceAllocationInfo(0, 1, &ResourceDesc);
+
+		App->Device->CreatePlacedResource(Heap, Offset, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
+	}
+
+	template<class T>
+	void CreateResource(std::unique_ptr<T>& App, u64 NewWidth, u64 NewHeight, u64 DepthOrArraySize = 1, DXGI_FORMAT _Format = DXGI_FORMAT_R8G8B8A8_UINT, u32 _MipLevels = 1, u64 _Alignment = 0, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE)
+	{
+		CD3DX12_HEAP_PROPERTIES ResourceTypeMain = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+
+		D3D12_RESOURCE_DESC ResourceDesc = {};
+		ResourceDesc.Format = Format;
+		ResourceDesc.Alignment = Alignment;
+		ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		ResourceDesc.Width = Width;
+		ResourceDesc.Height = Height;
+		ResourceDesc.DepthOrArraySize = Depth;
+		ResourceDesc.MipLevels = MipLevels;
+		ResourceDesc.SampleDesc.Count = 1;
+		ResourceDesc.SampleDesc.Quality = 0;
+		ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		ResourceDesc.Flags = Flags;
+
+		D3D12_RESOURCE_ALLOCATION_INFO AllocInfo = App->Device->GetResourceAllocationInfo(0, 1, &ResourceDesc);
+
+		App->Device->CreateCommittedResource(&ResourceTypeMain, D3D12_HEAP_FLAG_NONE, &ResourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&Handle));
+	}
+
 	u64 Width;
 	u64 Height;
+	u64 Depth;
+	u32 MipLevels;
+	u64 Alignment;
 	DXGI_FORMAT Format;
 	ComPtr<ID3D12Resource> Handle;
 	D3D12_CPU_DESCRIPTOR_HANDLE View;

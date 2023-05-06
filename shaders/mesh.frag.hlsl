@@ -2,9 +2,12 @@
 struct vert_res
 {
 	float4 Pos  : SV_Position;
-	float4 Coord: POSITION;
+	float4 Coord: POSITION0;
 	float4 Norm : NORMAL;
 	float4 Col  : COLOR;
+
+	float4 CameraPos : POSITION1;
+	float4 CameraDir : POSITION2;
 };
 
 struct material
@@ -27,11 +30,10 @@ float4 main(vert_res In) : SV_Target
 	float3 Normal   = In.Norm.xyz;
 	float3 Position = In.Coord.xyz;
 
-	float3 CamPos   = float3(0, 0, 1);
-	float3 CamDir   = normalize(CamPos - Position);
+	float3 CamPos   = In.CameraPos.xyz;
+	float3 CamDir   = In.CameraDir.xyz;
 
-	float3 LightPos = float3(0.0, 0.0, 0.45);
-	//float4 LightCol = float4(0.0, 1.0, 1.0, 0.6);
+	float3 LightPos = float3(0.45, 0.45, 0.45);
 	float4 LightCol = float4(1.0, 1.0, 0.0, 0.6);
 	float3 LightDir = (LightPos - Position).xyz;
 

@@ -233,6 +233,8 @@ public:
 	bool IsGfxPaused = false;
 	bool IsResizing  = false;
 
+	static window_class WindowClass;
+
 private:
 	window(const window& rhs) = delete;
 	window& operator=(const window& rhs) = delete;
@@ -240,8 +242,6 @@ private:
 	static LRESULT InitWindowProc(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam);
 	static LRESULT WindowProc(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam);
 	LRESULT DispatchMessages(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam);
-
-	static window_class WindowClass;
 
 	static LARGE_INTEGER TimerFrequency;
 
