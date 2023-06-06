@@ -35,7 +35,7 @@ public:
 		CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	}
 
-	void SetTarget(D3D12_VIEWPORT* Viewport, D3D12_RECT* Scissors, D3D12_CPU_DESCRIPTOR_HANDLE* RenderTarget, D3D12_CPU_DESCRIPTOR_HANDLE* DepthTarget)
+	void SetTargetAndClear(D3D12_VIEWPORT* Viewport, D3D12_RECT* Scissors, D3D12_CPU_DESCRIPTOR_HANDLE* RenderTarget, D3D12_CPU_DESCRIPTOR_HANDLE* DepthTarget)
 	{
 		CommandList->RSSetViewports(1, Viewport);
 		CommandList->RSSetScissorRects(1, Scissors);
@@ -47,9 +47,25 @@ public:
 		CommandList->ClearDepthStencilView(*DepthTarget, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
 	}
 
+	void SetTarget(D3D12_VIEWPORT* Viewport, D3D12_RECT* Scissors, D3D12_CPU_DESCRIPTOR_HANDLE* RenderTarget, D3D12_CPU_DESCRIPTOR_HANDLE* DepthTarget)
+	{
+		CommandList->RSSetViewports(1, Viewport);
+		CommandList->RSSetScissorRects(1, Scissors);
+
+		CommandList->OMSetRenderTargets(1, RenderTarget, true, DepthTarget);
+	}
+	
 	void End(command_queue& CommandQueue)
 	{
 		CommandQueue.Execute(CommandList);
+		Fence.Flush(CommandQueue);
+	}
+
+	void Present(command_queue& CommandQueue, IDXGISwapChain4* SwapChain)
+	{
+		CommandQueue.Execute(CommandList);
+		SwapChain->Present(0, 0);
+		BackBufferIndex = SwapChain->GetCurrentBackBufferIndex();
 		Fence.Flush(CommandQueue);
 	}
 
@@ -104,9 +120,9 @@ public:
 	}
 
 	ID3D12GraphicsCommandList* CommandList;
+	u32 BackBufferIndex = 0;
 
 private:
-	u32 BackBufferIndex = 0;
 
 	D3D12_VERTEX_BUFFER_VIEW VertexBufferView;
 	D3D12_INDEX_BUFFER_VIEW IndexBufferView;

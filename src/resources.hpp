@@ -357,11 +357,9 @@ struct texture
 class memory_heap
 {
 public:
-	memory_heap(u64 NewSize) : Size(NewSize), Alignment(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT)
+	template<typename T>
+	memory_heap(std::unique_ptr<T>& Gfx, u64 NewSize) : Size(NewSize), Alignment(D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT)
 	{
-		ComPtr<ID3D12Device6> Device;
-		GetDevice(&Device);
-
 		D3D12_HEAP_PROPERTIES HeapProps = {};
 	    HeapProps.Type = D3D12_HEAP_TYPE_CUSTOM;
 		HeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE;
@@ -373,7 +371,7 @@ public:
 		HeapDesc.SizeInBytes = Size;
 		HeapDesc.Alignment = Alignment;
 
-		Device->CreateHeap(&HeapDesc, IID_PPV_ARGS(&Handle));
+		Gfx->Device->CreateHeap(&HeapDesc, IID_PPV_ARGS(&Handle));
 	}
 
 	void Reset()

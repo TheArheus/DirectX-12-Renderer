@@ -88,8 +88,21 @@ struct mesh_draw_command_data
 	bool     IsVisible;
 };
 
+struct mesh_draw_command
+{
+	material Mat;
+	float4   Translate;
+	float    Scale;
+	float    Pad0;
+	float    Pad1;
+	float    Pad2;
+};
+
 StructuredBuffer<mesh_offset> MeshOffsets : register(t0, space0);
 RWStructuredBuffer<mesh_draw_command_data> MeshDrawCommandData : register(u0, space0);
+RWStructuredBuffer<indirect_draw_command> IndirectDrawCommands : register(u1, space0);
+RWStructuredBuffer<indirect_draw_indexed_command> IndirectDrawIndexedCommands : register(u2, space0);
+RWStructuredBuffer<mesh_draw_command> MeshDrawCommands : register(u3, space0);
 RWStructuredBuffer<mesh_culling_common_input> MeshCullingCommonInput : register(u0, space1);
 Texture2D HiZDepthTextures[] : register(t0, space1);
 SamplerState DepthSampler : register(s0, space1);
@@ -98,8 +111,15 @@ SamplerState DepthSampler : register(s0, space1);
 void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 {
 	uint DrawIndex = ThreadGroupID.x * 32 + ThreadID.x;
-
 	uint MeshIndex = MeshDrawCommandData[DrawIndex].MeshIndex;
+	if(DrawIndex == 0)
+	{
+		IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount = 0;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_InstanceCount = 0;
+
+		IndirectDrawCommands[MeshIndex].DrawCount = 0;
+		IndirectDrawIndexedCommands[MeshIndex].DrawCount = 0;
+	}
 
 	float4x4 Proj = MeshCullingCommonInput[0].Proj;
 
@@ -128,8 +148,7 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 	}
 
 	// Occlusion Culling
-	bool IsNotOcclCulled = true;
-	if(MeshCullingCommonInput[0].OcclusionCullingEnabled)
+	if(IsVisible && MeshCullingCommonInput[0].OcclusionCullingEnabled)
 	{
 		float3 BoxDims = (ProjBoxMax - ProjBoxMin);
 		uint Lod = ceil(log2(max(BoxDims.x * MeshCullingCommonInput[0].HiZWidth, BoxDims.y * MeshCullingCommonInput[0].HiZHeight)));
@@ -137,9 +156,34 @@ void main(uint3 ThreadGroupID : SV_GroupID, uint3 ThreadID : SV_GroupThreadID)
 		float4 Texel = HiZDepthTextures[Lod].Gather(DepthSampler, BoxDims.xy * 0.5);
 
 		float ObjDepth = ProjBoxMax.z;
-		IsNotOcclCulled = (ObjDepth >= (min(min(Texel.x, Texel.y), min(Texel.z, Texel.w)) - 0.01));
+		IsVisible = IsVisible && (ObjDepth >= (min(min(Texel.x, Texel.y), min(Texel.z, Texel.w)) - 0.01));
 	}
 
-	MeshDrawCommandData[DrawIndex].IsVisible = IsNotOcclCulled && IsVisible;
+	if(IsVisible && !MeshDrawCommandData[DrawIndex].IsVisible)
+	{
+		uint DrawCommandIdx;
+		InterlockedAdd(IndirectDrawCommands[MeshIndex].DrawCount, 1, DrawCommandIdx);
+		InterlockedAdd(IndirectDrawIndexedCommands[MeshIndex].DrawCount, 1);
+
+		IndirectDrawCommands[MeshIndex].BufferPtr  = MeshDrawCommandData[DrawIndex].Buffer1;
+		IndirectDrawCommands[MeshIndex].BufferPtr1 = MeshDrawCommandData[DrawIndex].Buffer2;
+		IndirectDrawCommands[MeshIndex].VertexDraw_VertexCountPerInstance = MeshOffsets[MeshIndex].VertexCount;
+		IndirectDrawCommands[MeshIndex].VertexDraw_StartVertexLocation = MeshOffsets[MeshIndex].VertexOffset;
+		IndirectDrawCommands[MeshIndex].VertexDraw_StartInstanceLocation = 0;
+
+		IndirectDrawIndexedCommands[MeshIndex].BufferPtr  = MeshDrawCommandData[DrawIndex].Buffer1;
+		IndirectDrawIndexedCommands[MeshIndex].BufferPtr1 = MeshDrawCommandData[DrawIndex].Buffer2;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_IndexCountPerInstance = MeshOffsets[MeshIndex].IndexCount;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_StartIndexLocation = MeshOffsets[MeshIndex].IndexOffset;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_BaseVertexLocation = 0;
+		IndirectDrawIndexedCommands[MeshIndex].IndexDraw_StartInstanceLocation = 0;
+
+		MeshDrawCommands[DrawCommandIdx].Translate = MeshDrawCommandData[DrawIndex].Translate;
+		MeshDrawCommands[DrawCommandIdx].Scale = MeshDrawCommandData[DrawIndex].Scale;
+
+		InterlockedAdd(IndirectDrawCommands[MeshIndex].VertexDraw_DrawInstanceCount, 1);
+		InterlockedAdd(IndirectDrawIndexedCommands[MeshIndex].IndexDraw_InstanceCount, 1);
+	}
+	MeshDrawCommandData[DrawIndex].IsVisible = IsVisible;
 }
 

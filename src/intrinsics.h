@@ -20,6 +20,7 @@
 #include <dxcapi.h>
 #include <D3DCompiler.h>
 #include <DirectXMath.h>
+#include <dxgidebug.h>
 #include <wrl.h>
 #include <windows.h>
 

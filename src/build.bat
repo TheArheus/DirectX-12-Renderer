@@ -6,7 +6,7 @@ if not defined DevEnvDir (
 setlocal EnableDelayedExpansion
 
 set OneFile=/Fe"D3D12 Learn" /Fd"D3D12 Learn"
-set CommonCompFlags=/std:c++20 -fp:fast -nologo -MT -EHsc -Od -Oi -WX- -W4 -GR- -Gm- -GS -FC -Zi -D_MBCS -wd4100 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267
+set CommonCompFlags=/std:c++20 -fp:fast -nologo -MTd -EHsc -Od -Oi -WX- -W4 -GR- -Gm- -GS -FC -Zi -D_MBCS -wd4100 -wd4189 -wd4201 -wd4238 -wd4244 -wd4267
 set CommonLinkFlags=-opt:ref -incremental:no /SUBSYSTEM:console
 
 set CppFiles="..\src\main.cpp"

@@ -14,7 +14,6 @@ void main(uint3 DispatchIndex : SV_DispatchThreadID)
 {
 	uint2 OutputDepthDims;
 	OutputDepth.GetDimensions(OutputDepthDims.x, OutputDepthDims.y);
-	//uint MipLevel = MipLevel == 0 ? 0 : InputDepthData[0].MipLevel;
 
 	float2 InputDepthUV = (float2(DispatchIndex.xy) + float2(0.5, 0.5)) / float2(OutputDepthDims);
 

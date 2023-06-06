@@ -303,8 +303,6 @@ public:
 	ID3D12PipelineState* CreateGraphicsPipeline(ID3D12RootSignature* GfxRootSignature, std::initializer_list<const std::string> ShaderList);
 	ID3D12PipelineState* CreateComputePipeline(ID3D12RootSignature* RootSignature, const std::string& ComputeShader);
 
-	void Present();
-
 public:
 	u32 Width;
 	u32 Height;
@@ -319,7 +317,6 @@ public:
 	descriptor_heap ResourceHeap;
 	texture BackBuffers[2];
 	texture DepthStencilBuffer;
-	int BackBufferIndex = 0;
 
 	ComPtr<IDXGISwapChain4> SwapChain;
 	ComPtr<ID3D12Device6> Device;
